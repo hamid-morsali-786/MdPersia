@@ -10,3 +10,5 @@ build/
 *.html
 .env
 .DS_Store
+browsers/
+tests/

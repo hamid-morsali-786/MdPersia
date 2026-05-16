@@ -1,2 +1,0 @@
-markdown-it-py>=4.2,<5
-playwright>=1.59,<2
