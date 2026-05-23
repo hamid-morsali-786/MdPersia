@@ -37,13 +37,50 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "input",
         type=Path,
+        nargs="?",
+        default=None,
         help="Markdown file or directory containing Markdown files.",
     )
     parser.add_argument(
         "-o",
         "--output",
         type=Path,
-        help="Output PDF path for a single file, or output directory for directory input.",
+        help="Output path for a single file, or output directory for directory input.",
+    )
+    parser.add_argument(
+        "-f",
+        "--format",
+        choices=["pdf", "docx"],
+        default="pdf",
+        help="Output format: pdf or docx. Default: pdf.",
+    )
+    parser.add_argument(
+        "--docx-image-scale",
+        type=int,
+        default=3,
+        choices=[1, 2, 3, 4],
+        help=(
+            "Image quality multiplier for Mermaid diagrams in DOCX. "
+            "Higher = sharper but larger files. Default: 3."
+        ),
+    )
+    parser.add_argument(
+        "--docx-image-min-width",
+        type=float,
+        default=4.0,
+        help="Minimum width (in inches) of Mermaid images in DOCX. Default: 4.0.",
+    )
+    parser.add_argument(
+        "--docx-image-max-width",
+        type=float,
+        default=6.5,
+        help="Maximum width (in inches) of Mermaid images in DOCX. Default: 6.5.",
+    )
+    parser.add_argument(
+        "--docx-font-size",
+        type=int,
+        default=12,
+        help="Body font size (in points) for DOCX output. Default: 12.",
     )
     parser.add_argument(
         "--recursive",
@@ -159,6 +196,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="version",
         version=f"%(prog)s {__version__}",
     )
+    parser.add_argument(
+        "--gui",
+        action="store_true",
+        help="Launch the graphical user interface instead of converting.",
+    )
 
     return parser
 
@@ -236,6 +278,15 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
+    if args.gui:
+        from .gui import launch_gui
+
+        launch_gui()
+        return 0
+
+    if args.input is None:
+        parser.error("the following arguments are required: input (or use --gui)")
+
     try:
         project_root = find_project_root(args.input)
 
@@ -250,6 +301,7 @@ def main(argv: list[str] | None = None) -> int:
 
         if args.verbose:
             print(f"[fa-md-pdf] project root: {project_root}")
+            print(f"[fa-md-pdf] format:       {args.format}")
             print(f"[fa-md-pdf] mermaid js:   {mermaid_source}")
             print(f"[fa-md-pdf] font file:    {font_file or '-'}")
             print(f"[fa-md-pdf] font dir:     {font_dir or '-'}")
@@ -261,6 +313,7 @@ def main(argv: list[str] | None = None) -> int:
             recursive=args.recursive,
             extensions=extensions,
             keep_html=args.keep_html,
+            output_format=args.format,
         )
 
         if not jobs:
@@ -281,6 +334,11 @@ def main(argv: list[str] | None = None) -> int:
             keep_html=args.keep_html,
             ignore_mermaid_errors=args.ignore_mermaid_errors,
             verbose=args.verbose,
+            output_format=args.format,
+            docx_font_size_pt=args.docx_font_size,
+            docx_image_scale=args.docx_image_scale,
+            docx_image_min_width=args.docx_image_min_width,
+            docx_image_max_width=args.docx_image_max_width,
         )
 
         results = convert_jobs(jobs, options=options, fail_fast=args.fail_fast)

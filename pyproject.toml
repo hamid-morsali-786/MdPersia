@@ -28,7 +28,8 @@ classifiers = [
 ]
 dependencies = [
   "markdown-it-py>=4.2,<5",
-  "playwright>=1.59,<2"
+  "playwright>=1.59,<2",
+  "python-docx>=1.1,<2"
 ]
 
 [project.optional-dependencies]
@@ -38,6 +39,7 @@ dev = [
 
 [project.scripts]
 fa-md-pdf = "fa_md_pdf.cli:main"
+fa-md-pdf-gui = "fa_md_pdf.gui:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

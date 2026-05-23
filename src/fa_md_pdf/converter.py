@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import tempfile
+import threading
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
+from typing import TYPE_CHECKING, Iterable
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import sync_playwright
@@ -42,6 +46,11 @@ class ConvertOptions:
     keep_html: bool = False
     ignore_mermaid_errors: bool = False
     verbose: bool = False
+    output_format: str = "pdf"  # "pdf" or "docx"
+    docx_font_size_pt: int = 12
+    docx_image_scale: int = 3       # device scale factor for Mermaid PNGs
+    docx_image_min_width: float = 4.0    # minimum image width in inches
+    docx_image_max_width: float = 6.5    # maximum image width in inches
 
 
 @dataclass(frozen=True)
@@ -73,17 +82,25 @@ def discover_markdown_files(input_dir: Path, recursive: bool, extensions: Iterab
     return sorted(path for path in input_dir.glob(pattern) if is_markdown_file(path, normalized))
 
 
-def output_for_file(source: Path, input_root: Path | None, output: Path | None) -> Path:
+def output_for_file(
+    source: Path,
+    input_root: Path | None,
+    output: Path | None,
+    output_format: str = "pdf",
+) -> Path:
+    suffix = f".{output_format}"
+    target_suffixes = {".pdf", ".docx"}
+
     if output is None:
-        return source.with_suffix(".pdf")
+        return source.with_suffix(suffix)
 
     if input_root is None:
-        if output.suffix.lower() == ".pdf":
+        if output.suffix.lower() in target_suffixes:
             return output
-        return output / source.with_suffix(".pdf").name
+        return output / source.with_suffix(suffix).name
 
     relative = source.relative_to(input_root)
-    return (output / relative).with_suffix(".pdf")
+    return (output / relative).with_suffix(suffix)
 
 
 def build_jobs(
@@ -92,27 +109,35 @@ def build_jobs(
     recursive: bool = True,
     extensions: Iterable[str] = (".md", ".markdown"),
     keep_html: bool = False,
+    output_format: str = "pdf",
 ) -> list[ConvertJob]:
+    if output_format not in ("pdf", "docx"):
+        raise ConversionError(f"Unsupported output format: {output_format}")
+
     input_path = input_path.resolve()
     output = output.resolve() if output else None
+    target_suffix = f".{output_format}"
+    target_suffixes = {".pdf", ".docx"}
 
     if input_path.is_file():
         if not is_markdown_file(input_path, extensions):
             raise ConversionError(f"Input file is not a supported Markdown file: {input_path}")
-        pdf_output = output_for_file(input_path, None, output)
-        html_output = pdf_output.with_suffix(".html") if keep_html else None
-        return [ConvertJob(source=input_path, output=pdf_output, html_output=html_output)]
+        out = output_for_file(input_path, None, output, output_format)
+        html_output = out.with_suffix(".html") if keep_html else None
+        return [ConvertJob(source=input_path, output=out, html_output=html_output)]
 
     if input_path.is_dir():
-        if output is not None and output.suffix.lower() == ".pdf":
-            raise ConversionError("When input is a directory, --output must be a directory, not a PDF file.")
+        if output is not None and output.suffix.lower() in target_suffixes:
+            raise ConversionError(
+                "When input is a directory, --output must be a directory, not a file."
+            )
 
         files = discover_markdown_files(input_path, recursive=recursive, extensions=extensions)
         jobs: list[ConvertJob] = []
         for source in files:
-            pdf_output = output_for_file(source, input_path if output else None, output)
-            html_output = pdf_output.with_suffix(".html") if keep_html else None
-            jobs.append(ConvertJob(source=source, output=pdf_output, html_output=html_output))
+            out = output_for_file(source, input_path if output else None, output, output_format)
+            html_output = out.with_suffix(".html") if keep_html else None
+            jobs.append(ConvertJob(source=source, output=out, html_output=html_output))
         return jobs
 
     raise ConversionError(f"Input path does not exist: {input_path}")
@@ -180,10 +205,69 @@ def _render_job(page, job: ConvertJob, options: ConvertOptions, temp_dir: Path) 
     )
 
 
+def _render_job_docx(job: ConvertJob, options: ConvertOptions) -> None:
+    """Render a Markdown file to DOCX, with Mermaid diagrams as embedded PNGs."""
+    from .docx_builder import DocxBuildOptions, build_docx, extract_mermaid_blocks
+    from .mermaid_renderer import render_mermaid_to_png
+
+    markdown_text = read_text_safely(job.source)
+
+    # Extract mermaid codes first to render them as PNGs (only if any exist)
+    _, mermaid_codes = extract_mermaid_blocks(markdown_text)
+
+    mermaid_images: dict[str, Path] = {}
+    if mermaid_codes:
+        try:
+            mermaid_images = render_mermaid_to_png(
+                mermaid_codes,
+                mermaid_source=options.mermaid_source,
+                mermaid_theme=options.mermaid_theme,
+                font_family=options.font_family,
+                timeout_ms=options.mermaid_timeout_ms,
+                ignore_errors=options.ignore_mermaid_errors,
+                device_scale_factor=options.docx_image_scale,
+            )
+        except Exception as exc:  # noqa: BLE001
+            if not options.ignore_mermaid_errors:
+                raise ConversionError(
+                    f"Failed to render Mermaid diagrams for {job.source}: {exc}"
+                ) from exc
+
+    # Pick a clean DOCX font name (single family, no CSS list)
+    docx_font = _pick_docx_font_family(options.font_family)
+
+    build_docx(
+        markdown_text,
+        DocxBuildOptions(
+            source_path=job.source,
+            font_family=docx_font,
+            font_size_pt=options.docx_font_size_pt,
+            rtl=True,
+            mermaid_images=mermaid_images or None,
+            image_scale=options.docx_image_scale,
+            image_min_width_inches=options.docx_image_min_width,
+            image_max_width_inches=options.docx_image_max_width,
+        ),
+        job.output,
+    )
+
+
+def _pick_docx_font_family(css_font_family: str) -> str:
+    """Pick a single font family name from a CSS-style font-family list."""
+    parts = css_font_family.split(",")
+    for part in parts:
+        cleaned = part.strip().strip("'").strip('"')
+        if cleaned:
+            return cleaned
+    return "Vazirmatn"
+
+
 def convert_jobs(
     jobs: Iterable[ConvertJob],
     options: ConvertOptions,
     fail_fast: bool = False,
+    on_progress: "Callable[[ConvertJob, bool, str | None], None] | None" = None,
+    cancel_event: "threading.Event | None" = None,
 ) -> list[ConvertResult]:
     jobs = list(jobs)
     if not jobs:
@@ -191,6 +275,32 @@ def convert_jobs(
 
     results: list[ConvertResult] = []
 
+    if options.output_format == "docx":
+        # DOCX conversion doesn't need a persistent browser session
+        for job in jobs:
+            if cancel_event and cancel_event.is_set():
+                break
+
+            if options.verbose:
+                print(f"[fa-md-pdf] {job.source} -> {job.output}")
+
+            try:
+                _render_job_docx(job, options)
+                result = ConvertResult(job=job, ok=True)
+                results.append(result)
+                if on_progress:
+                    on_progress(job, True, None)
+            except Exception as exc:  # noqa: BLE001
+                result = ConvertResult(job=job, ok=False, error=str(exc))
+                results.append(result)
+                if on_progress:
+                    on_progress(job, False, str(exc))
+                if fail_fast:
+                    break
+
+        return results
+
+    # PDF conversion uses Playwright browser session
     with tempfile.TemporaryDirectory(prefix="fa-md-pdf-") as tmp:
         temp_dir = Path(tmp)
 
@@ -200,14 +310,23 @@ def convert_jobs(
 
             try:
                 for job in jobs:
+                    if cancel_event and cancel_event.is_set():
+                        break
+
                     if options.verbose:
                         print(f"[fa-md-pdf] {job.source} -> {job.output}")
 
                     try:
                         _render_job(page, job, options, temp_dir)
-                        results.append(ConvertResult(job=job, ok=True))
+                        result = ConvertResult(job=job, ok=True)
+                        results.append(result)
+                        if on_progress:
+                            on_progress(job, True, None)
                     except Exception as exc:  # noqa: BLE001 - CLI needs to summarize all job failures.
-                        results.append(ConvertResult(job=job, ok=False, error=str(exc)))
+                        result = ConvertResult(job=job, ok=False, error=str(exc))
+                        results.append(result)
+                        if on_progress:
+                            on_progress(job, False, str(exc))
                         if fail_fast:
                             break
                     finally:

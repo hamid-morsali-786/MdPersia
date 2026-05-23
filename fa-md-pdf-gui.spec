@@ -1,11 +1,12 @@
 # -*- mode: python ; coding: utf-8 -*-
 
-
 a = Analysis(
-    ['entry_point.py'],
+    ['entry_point_gui.py'],
     pathex=['src'],
     binaries=[],
-    datas=[('src/fa_md_pdf/assets/default.css', 'fa_md_pdf/assets')],
+    datas=[
+        ('src/fa_md_pdf/assets/default.css', 'fa_md_pdf/assets'),
+    ],
     hiddenimports=[
         'fa_md_pdf',
         'fa_md_pdf.cli',
@@ -40,14 +41,14 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='fa-md-pdf',
+    name='fa-md-pdf-gui',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
     upx_exclude=[],
     runtime_tmpdir=None,
-    console=True,
+    console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
