@@ -49,6 +49,32 @@ class HtmlBuildOptions:
     page_format: str = "A4"
     margin: str = "15mm"
     landscape: bool = False
+    strip_emojis: bool = False
+
+
+EMOJI_PATTERN: Final[re.Pattern[str]] = re.compile(
+    r"("
+    r"[\U0001F000-\U0001FAFF]"
+    r"|[\u2600-\u27BF]"
+    r"|[\u2300-\u23FF]"
+    r"|[\u2B00-\u2BFF]"
+    r"|[\U0001F1E6-\U0001F1FF]"
+    r"|[\u203C\u2049\u2122\u2139\u2194-\u2199\u21A9-\u21AA\u25AA-\u25AB\u25B6\u25C0\u25FB-\u25FE\u2934-\u2935]"
+    r"|[\uFE0E\uFE0F]"
+    r"|[\u200D]"
+    r")+"
+)
+
+
+def strip_emojis(text: str) -> str:
+    """Remove emojis and normalize surrounding spaces from text without removing newlines."""
+    res = EMOJI_PATTERN.sub("", text)
+    res = re.sub(r"[ \t]{2,}", " ", res)
+    res = re.sub(r"\([ \t]+", "(", res)
+    res = re.sub(r"[ \t]+\)", ")", res)
+    res = re.sub(r"\|[ \t]{2,}", "| ", res)
+    res = re.sub(r"[ \t]{2,}\|", " |", res)
+    return res
 
 
 @dataclass(frozen=True)
@@ -277,6 +303,14 @@ CALLOUT_TITLES: Final[dict[str, tuple[str, str]]] = {
     "CAUTION": ("callout-caution", "🛑 احتیاط"),
 }
 
+CALLOUT_TITLES_PLAIN: Final[dict[str, tuple[str, str]]] = {
+    "NOTE": ("callout-note", "نکته"),
+    "TIP": ("callout-tip", "راهنما"),
+    "IMPORTANT": ("callout-important", "مهم"),
+    "WARNING": ("callout-warning", "هشدار"),
+    "CAUTION": ("callout-caution", "احتیاط"),
+}
+
 CALLOUT_RE: Final[re.Pattern[str]] = re.compile(
     r"<blockquote>\s*<p>\s*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\](?:\s*<br\s*/?>|\s*\n)?\s*(.*?)(?=</blockquote>)",
     re.IGNORECASE | re.DOTALL,
@@ -288,11 +322,13 @@ PAGEBREAK_RE: Final[re.Pattern[str]] = re.compile(
 )
 
 
-def _transform_callouts(html_str: str) -> str:
+def _transform_callouts(html_str: str, strip_emojis_flag: bool = False) -> str:
+    titles = CALLOUT_TITLES_PLAIN if strip_emojis_flag else CALLOUT_TITLES
+
     def repl(m: re.Match[str]) -> str:
         callout_type = m.group(1).upper()
         content = m.group(2)
-        cls_name, title_fa = CALLOUT_TITLES.get(
+        cls_name, title_fa = titles.get(
             callout_type, (f"callout-{callout_type.lower()}", callout_type)
         )
         return (
@@ -309,13 +345,15 @@ def _transform_pagebreaks(html_str: str) -> str:
 
 
 def build_html(markdown_text: str, options: HtmlBuildOptions) -> HtmlDocument:
+    if options.strip_emojis:
+        markdown_text = strip_emojis(markdown_text)
     markdown_text = strip_front_matter(markdown_text)
     title = extract_title(markdown_text, options.source_path.stem)
 
     markdown_with_mermaid, has_mermaid = convert_mermaid_fences_to_html(markdown_text)
     renderer = build_markdown_renderer()
     body_html = renderer.render(markdown_with_mermaid)
-    body_html = _transform_callouts(body_html)
+    body_html = _transform_callouts(body_html, strip_emojis_flag=options.strip_emojis)
     body_html = _transform_pagebreaks(body_html)
 
     css = build_css(options)

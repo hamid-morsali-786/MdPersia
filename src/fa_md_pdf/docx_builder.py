@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -18,9 +18,11 @@ from markdown_it.token import Token
 
 from .html_builder import (
     DEFAULT_MERMAID_CDN,
+    EMOJI_PATTERN,
     convert_mermaid_fences_to_html,
     extract_title,
     read_text_safely,
+    strip_emojis,
     strip_front_matter,
 )
 
@@ -33,6 +35,7 @@ if TYPE_CHECKING:
 DEFAULT_DOCX_FONT = "Vazirmatn"
 DEFAULT_DOCX_FONT_FALLBACK = "Tahoma"
 DEFAULT_DOCX_CODE_FONT = "Consolas"
+DEFAULT_DOCX_EMOJI_FONT = "Segoe UI Emoji"
 
 HEADING_SIZES = {1: 22, 2: 18, 3: 15, 4: 13, 5: 12, 6: 11}
 
@@ -82,6 +85,7 @@ class DocxBuildOptions:
     page_format: str = "A4"
     margin: str = "15mm"
     landscape: bool = False
+    strip_emojis: bool = False
 
 
 @dataclass(frozen=True)
@@ -234,11 +238,84 @@ def _set_document_default_rtl(document: "DocxDocument", font_name: str, font_siz
             pass
 
 
+@dataclass(frozen=True)
+class RunStyle:
+    font_name: str = DEFAULT_DOCX_FONT
+    font_size_pt: int | None = None
+    bold: bool = False
+    italic: bool = False
+    color: RGBColor | None = None
+    code: bool = False
+    rtl: bool = True
+
+
+def _split_emojis(text: str) -> list[tuple[str, bool]]:
+    """Split text into (substring, is_emoji) pairs."""
+    result: list[tuple[str, bool]] = []
+    last_end = 0
+    for match in EMOJI_PATTERN.finditer(text):
+        start, end = match.span()
+        if start > last_end:
+            result.append((text[last_end:start], False))
+        result.append((match.group(0), True))
+        last_end = end
+    if last_end < len(text):
+        result.append((text[last_end:], False))
+    return result or [(text, False)]
+
+
+def _apply_run_formatting(run, style: RunStyle) -> None:
+    """Apply size, weight, slant, color, and bidi formatting to a run."""
+    if style.font_size_pt is not None:
+        run.font.size = Pt(style.font_size_pt)
+        _set_run_size_cs(run, style.font_size_pt)
+    if style.bold:
+        run.bold = True
+        _set_run_bold_cs(run)
+    if style.italic:
+        run.italic = True
+        _set_run_italic_cs(run)
+    if style.color is not None:
+        run.font.color.rgb = style.color
+    if style.rtl and not style.code:
+        _set_run_rtl(run)
+    else:
+        _set_run_ltr(run)
+
+
+def _add_single_run(paragraph: "Paragraph", text: str, style: RunStyle):
+    """Add a single formatted run to a paragraph."""
+    run = paragraph.add_run(text)
+    f_name = style.font_name
+    cs_font = None if style.code else f_name
+    _set_run_font(run, f_name, complex_script_font=cs_font)
+    _apply_run_formatting(run, style)
+    return run
+
+
+def _add_emoji_split_runs(
+    paragraph: "Paragraph",
+    text: str,
+    base_style: RunStyle,
+    base_font: str,
+):
+    """Split text by emojis and add individual runs with matching fonts."""
+    last_run = None
+    for piece, is_emoji in _split_emojis(text):
+        style = replace(
+            base_style,
+            font_name=DEFAULT_DOCX_EMOJI_FONT if is_emoji else base_font,
+            rtl=False if is_emoji else base_style.rtl,
+        )
+        last_run = _add_single_run(paragraph, piece, style)
+    return last_run
+
+
 def _add_styled_run(
     paragraph: "Paragraph",
     text: str,
     *,
-    font_name: str,
+    font_name: str = DEFAULT_DOCX_FONT,
     font_size_pt: int | None = None,
     bold: bool = False,
     italic: bool = False,
@@ -246,30 +323,36 @@ def _add_styled_run(
     rtl: bool = True,
     color: RGBColor | None = None,
 ):
-    """Add a run to the paragraph with styling."""
-    run = paragraph.add_run(text)
-    if code:
-        _set_run_font(run, DEFAULT_DOCX_CODE_FONT, complex_script_font=font_name)
-    else:
-        _set_run_font(run, font_name)
-    if font_size_pt is not None:
-        run.font.size = Pt(font_size_pt)
-        # Word reads size from szCs for RTL/Arabic/Persian text
-        _set_run_size_cs(run, font_size_pt)
-    if bold:
-        run.bold = True
-        # Word reads bold from bCs for RTL text
-        _set_run_bold_cs(run)
-    if italic:
-        run.italic = True
-        _set_run_italic_cs(run)
-    if color is not None:
-        run.font.color.rgb = color
-    if rtl and not code:
-        _set_run_rtl(run)
-    else:
-        _set_run_ltr(run)
-    return run
+    """Add a run to the paragraph with styling and emoji font fallback."""
+    if not text:
+        return None
+    style = RunStyle(
+        font_name=DEFAULT_DOCX_CODE_FONT if code else font_name,
+        font_size_pt=font_size_pt,
+        bold=bold,
+        italic=italic,
+        color=color,
+        code=code,
+        rtl=rtl,
+    )
+    if not code and EMOJI_PATTERN.search(text):
+        return _add_emoji_split_runs(paragraph, text, style, font_name)
+    return _add_single_run(paragraph, text, style)
+
+
+def _create_hyperlink_piece(hyperlink, paragraph: "Paragraph", text: str, style: RunStyle) -> None:
+    """Create a styled run inside a Word hyperlink element."""
+    from docx.oxml import parse_xml
+    from docx.text.run import Run
+
+    run_xml = parse_xml(r'<w:r xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"/>')
+    hyperlink.append(run_xml)
+    run = Run(run_xml, paragraph)
+    run.text = text
+    cs_font = style.font_name if not style.rtl else None
+    _set_run_font(run, style.font_name, complex_script_font=cs_font)
+    _apply_run_formatting(run, style)
+    run.underline = True
 
 
 def _add_hyperlink_run(
@@ -283,41 +366,34 @@ def _add_hyperlink_run(
     italic: bool = False,
     rtl: bool = True,
 ) -> None:
-    """Add a native Word hyperlink to a paragraph."""
+    """Add a native Word hyperlink to a paragraph with emoji support."""
     try:
         from docx.opc.constants import RELATIONSHIP_TYPE
         from docx.oxml import parse_xml
-        from docx.text.run import Run
 
         part = paragraph.part
         r_id = part.relate_to(href, RELATIONSHIP_TYPE.HYPERLINK, is_external=True)
-
         hyperlink = parse_xml(
             f'<w:hyperlink xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" '
             f'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:id="{r_id}"/>'
         )
-        run_xml = parse_xml(r'<w:r xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"/>')
-        hyperlink.append(run_xml)
         paragraph._p.append(hyperlink)
 
-        run = Run(run_xml, paragraph)
-        run.text = text
-        _set_run_font(run, font_name)
-        if font_size_pt is not None:
-            run.font.size = Pt(font_size_pt)
-            _set_run_size_cs(run, font_size_pt)
-        if bold:
-            run.bold = True
-            _set_run_bold_cs(run)
-        if italic:
-            run.italic = True
-            _set_run_italic_cs(run)
-        run.underline = True
-        run.font.color.rgb = RGBColor(0x07, 0x58, 0x85)
-        if rtl:
-            _set_run_rtl(run)
-        else:
-            _set_run_ltr(run)
+        base_style = RunStyle(
+            font_name=font_name,
+            font_size_pt=font_size_pt,
+            bold=bold,
+            italic=italic,
+            color=RGBColor(0x07, 0x58, 0x85),
+            rtl=rtl,
+        )
+        for piece, is_emoji in _split_emojis(text):
+            style = replace(
+                base_style,
+                font_name=DEFAULT_DOCX_EMOJI_FONT if is_emoji else font_name,
+                rtl=False if is_emoji else rtl,
+            )
+            _create_hyperlink_piece(hyperlink, paragraph, piece, style)
     except Exception:
         _add_styled_run(
             paragraph,
@@ -563,11 +639,11 @@ def _add_paragraph_block(
 
 
 CALLOUT_CONFIGS = {
-    "NOTE": {"color": RGBColor(0x25, 0x63, 0xEB), "hex": "2563EB", "bg": "EFF6FF", "title": "💡 نکته:"},
-    "TIP": {"color": RGBColor(0x16, 0xA3, 0x4A), "hex": "16A34A", "bg": "F0FDF4", "title": "💡 راهنما:"},
-    "IMPORTANT": {"color": RGBColor(0x7C, 0x3A, 0xED), "hex": "7C3AED", "bg": "F5F3FF", "title": "📌 مهم:"},
-    "WARNING": {"color": RGBColor(0xD9, 0x77, 0x06), "hex": "D97706", "bg": "FFFBEB", "title": "⚠️ هشدار:"},
-    "CAUTION": {"color": RGBColor(0xDC, 0x26, 0x26), "hex": "DC2626", "bg": "FEF2F2", "title": "🛑 احتیاط:"},
+    "NOTE": {"color": RGBColor(0x25, 0x63, 0xEB), "hex": "2563EB", "bg": "EFF6FF", "title": "💡 نکته:", "title_plain": "نکته:"},
+    "TIP": {"color": RGBColor(0x16, 0xA3, 0x4A), "hex": "16A34A", "bg": "F0FDF4", "title": "💡 راهنما:", "title_plain": "راهنما:"},
+    "IMPORTANT": {"color": RGBColor(0x7C, 0x3A, 0xED), "hex": "7C3AED", "bg": "F5F3FF", "title": "📌 مهم:", "title_plain": "مهم:"},
+    "WARNING": {"color": RGBColor(0xD9, 0x77, 0x06), "hex": "D97706", "bg": "FFFBEB", "title": "⚠️ هشدار:", "title_plain": "هشدار:"},
+    "CAUTION": {"color": RGBColor(0xDC, 0x26, 0x26), "hex": "DC2626", "bg": "FEF2F2", "title": "🛑 احتیاط:", "title_plain": "احتیاط:"},
 }
 
 
@@ -699,9 +775,11 @@ def _add_blockquote(
             pPr.append(pBdr)
 
             if idx == 0:
+                raw_title = cfg["title_plain"] if options.strip_emojis else cfg["title"]
+                suffix = " " if any(t.content.strip() for t in inline if t.type == "text") else ""
                 _add_styled_run(
                     paragraph,
-                    cfg["title"] + (" " if any(t.content.strip() for t in inline if t.type == "text") else ""),
+                    raw_title + suffix,
                     font_name=options.font_family,
                     font_size_pt=options.font_size_pt,
                     bold=True,
@@ -944,6 +1022,8 @@ def build_docx(
     If options.mermaid_images is provided, mermaid blocks are replaced with
     embedded PNG images. Otherwise the source code is included as a code block.
     """
+    if options.strip_emojis:
+        markdown_text = strip_emojis(markdown_text)
     text = strip_front_matter(markdown_text)
     title = extract_title(text, options.source_path.stem)
 

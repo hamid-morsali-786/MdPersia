@@ -97,3 +97,72 @@ def test_docx_custom_margins_and_page_format(tmp_path: Path) -> None:
     assert section.orientation == WD_ORIENT.LANDSCAPE
     assert abs(section.page_width.mm - 297.0) < 0.5
     assert abs(section.page_height.mm - 210.0) < 0.5
+
+
+def test_docx_emoji_font_applied(tmp_path: Path) -> None:
+    md_content = "# 📊 گزارش عملکرد\nمتن شامل 💡 نکته مهم و [🔗 پیوند آزمایشی](https://example.com) است."
+    input_file = tmp_path / "emoji_font.md"
+    input_file.write_text(md_content, encoding="utf-8")
+    output_file = tmp_path / "emoji_font.docx"
+
+    options = DocxBuildOptions(source_path=input_file)
+    build_docx(md_content, options, output_file)
+
+    assert output_file.is_file()
+    doc = docx.Document(output_file)
+
+    # Check that runs containing emojis have Segoe UI Emoji font set in w:rFonts
+    emoji_runs = []
+    vazir_runs = []
+    for p in doc.paragraphs:
+        for r in p.runs:
+            rFonts = r._r.xpath('.//w:rFonts')
+            if rFonts:
+                ascii_font = rFonts[0].get("{http://schemas.openxmlformats.org/wordprocessingml/2006/main}ascii")
+                if "📊" in r.text or "💡" in r.text or "🔗" in r.text:
+                    emoji_runs.append(ascii_font)
+                elif "گزارش" in r.text or "پیوند" in r.text:
+                    vazir_runs.append(ascii_font)
+
+    assert len(emoji_runs) >= 2
+    assert all(font == "Segoe UI Emoji" for font in emoji_runs)
+    assert all(font == "Vazirmatn" for font in vazir_runs)
+
+
+def test_docx_strip_emojis_option(tmp_path: Path) -> None:
+    md_content = """# 📊 گزارش کار
+
+متن شامل 💡 راهنما و ❌ خطا است.
+
+> [!NOTE]
+> نکته آزمایشی
+
+| ستون ۱ | ستون ۲ |
+| --- | --- |
+| 🚀 پرسرعت | ✅ تایید شده |
+"""
+    input_file = tmp_path / "strip_test.md"
+    input_file.write_text(md_content, encoding="utf-8")
+    output_file = tmp_path / "strip_test.docx"
+
+    options = DocxBuildOptions(source_path=input_file, strip_emojis=True)
+    build_docx(md_content, options, output_file)
+
+    assert output_file.is_file()
+    doc = docx.Document(output_file)
+
+    full_text = " ".join(p.text for p in doc.paragraphs)
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                full_text += " " + cell.text
+
+    assert "📊" not in full_text
+    assert "💡" not in full_text
+    assert "❌" not in full_text
+    assert "🚀" not in full_text
+    assert "✅" not in full_text
+    assert "گزارش کار" in full_text
+    assert "پرسرعت" in full_text
+    assert "تایید شده" in full_text
+    assert "نکته:" in full_text

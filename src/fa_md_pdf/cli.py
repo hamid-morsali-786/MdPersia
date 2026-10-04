@@ -138,6 +138,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Generate landscape PDFs.",
     )
+    parser.add_argument(
+        "--strip-emojis",
+        action="store_true",
+        help="Remove all emojis from converted PDF and DOCX documents.",
+    )
 
     parser.add_argument(
         "--mermaid-js",
@@ -446,6 +451,7 @@ def main(argv: list[str] | None = None) -> int:
             docx_image_scale=args.docx_image_scale,
             docx_image_min_width=args.docx_image_min_width,
             docx_image_max_width=args.docx_image_max_width,
+            strip_emojis=args.strip_emojis,
         )
 
         results = convert_jobs(jobs, options=options, fail_fast=args.fail_fast)

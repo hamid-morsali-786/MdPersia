@@ -275,6 +275,8 @@ class MainWindow:
         notebook = ttk.Notebook(frame)
         notebook.pack(fill=tk.X)
 
+        self.strip_emojis_var = tk.BooleanVar(value=False)
+
         self._build_page_tab(notebook)
         self._build_font_tab(notebook)
         self._build_mermaid_tab(notebook)
@@ -319,6 +321,13 @@ class MainWindow:
         self.pdf_page_numbers_var = tk.BooleanVar(value=True)
         ttk.Checkbutton(
             row4, text="شماره‌گذاری صفحات در پابرگ PDF (صفحه X از Y)", variable=self.pdf_page_numbers_var
+        ).pack(side=tk.RIGHT)
+
+        # Strip emojis
+        row5 = ttk.Frame(tab)
+        row5.pack(fill=tk.X, pady=2)
+        ttk.Checkbutton(
+            row5, text="حذف کامل ایموجی‌ها از خروجی (Strip Emojis)", variable=self.strip_emojis_var
         ).pack(side=tk.RIGHT)
 
     def _build_font_tab(self, notebook: ttk.Notebook) -> None:
@@ -515,6 +524,15 @@ class MainWindow:
             row6,
             text="شماره‌گذاری خودکار صفحات در پابرگ (صفحه X از Y)",
             variable=self.docx_page_numbers_var,
+        ).pack(side=tk.RIGHT)
+
+        # Strip emojis
+        row7 = ttk.Frame(tab)
+        row7.pack(fill=tk.X, pady=2)
+        ttk.Checkbutton(
+            row7,
+            text="حذف کامل ایموجی‌ها از خروجی (Strip Emojis)",
+            variable=self.strip_emojis_var,
         ).pack(side=tk.RIGHT)
 
         # Feature badges
@@ -768,6 +786,7 @@ class MainWindow:
             docx_image_max_width=docx_image_max_width,
             include_page_numbers=include_pages,
             highlight_code=highlight_code,
+            strip_emojis=self.strip_emojis_var.get(),
         )
 
     def _start_conversion(self) -> None:

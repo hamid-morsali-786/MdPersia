@@ -53,6 +53,7 @@ class ConvertOptions:
     docx_image_max_width: float = 6.5    # maximum image width in inches
     include_page_numbers: bool = True
     highlight_code: bool = True
+    strip_emojis: bool = False
 
 
 @dataclass(frozen=True)
@@ -167,6 +168,7 @@ def _render_job(page, job: ConvertJob, options: ConvertOptions, temp_dir: Path) 
             page_format=options.page_format,
             margin=options.margin,
             landscape=options.landscape,
+            strip_emojis=options.strip_emojis,
         ),
     )
 
@@ -262,6 +264,7 @@ def _render_job_docx(job: ConvertJob, options: ConvertOptions) -> None:
             page_format=options.page_format,
             margin=options.margin,
             landscape=options.landscape,
+            strip_emojis=options.strip_emojis,
         ),
         job.output,
     )

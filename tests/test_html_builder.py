@@ -62,3 +62,23 @@ def test_build_html_loads_vazirmatn_font_dir(tmp_path: Path):
 
     assert 'font-family: "Vazirmatn";' in doc.html
     assert "Vazirmatn-Regular.ttf" in doc.html
+
+
+def test_html_strip_emojis_option(tmp_path: Path):
+    source = tmp_path / "emoji.md"
+    content = "# 📊 عنوان تستی\n\nمتن با 💡 و ⚠️\n\n> [!NOTE]\n> نکته تستی\n"
+    source.write_text(content, encoding="utf-8")
+
+    doc = build_html(
+        content,
+        HtmlBuildOptions(
+            source_path=source,
+            strip_emojis=True,
+        ),
+    )
+
+    assert "📊" not in doc.html
+    assert "💡" not in doc.html
+    assert "⚠️" not in doc.html
+    assert "عنوان تستی" in doc.html
+    assert '<div class="callout-title">نکته</div>' in doc.html
