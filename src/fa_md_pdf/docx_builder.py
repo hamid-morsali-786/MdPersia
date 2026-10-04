@@ -58,18 +58,40 @@ def _set_paragraph_rtl(paragraph: "Paragraph") -> None:
     """Apply right-to-left direction to a paragraph."""
     pPr = paragraph._p.get_or_add_pPr()
     bidi = pPr.find(qn("w:bidi"))
-    if bidi is None:
-        bidi = pPr.makeelement(qn("w:bidi"), {})
-        pPr.append(bidi)
+    if bidi is not None:
+        pPr.remove(bidi)
+    bidi = pPr.makeelement(qn("w:bidi"), {})
+    pPr.append(bidi)
+
+
+def _set_paragraph_ltr(paragraph: "Paragraph") -> None:
+    """Explicitly apply left-to-right direction to a paragraph."""
+    pPr = paragraph._p.get_or_add_pPr()
+    bidi = pPr.find(qn("w:bidi"))
+    if bidi is not None:
+        pPr.remove(bidi)
+    bidi = pPr.makeelement(qn("w:bidi"), {qn("w:val"): "0"})
+    pPr.append(bidi)
 
 
 def _set_run_rtl(run) -> None:
     """Apply right-to-left text formatting to a run."""
     rPr = run._r.get_or_add_rPr()
     rtl = rPr.find(qn("w:rtl"))
-    if rtl is None:
-        rtl = rPr.makeelement(qn("w:rtl"), {})
-        rPr.append(rtl)
+    if rtl is not None:
+        rPr.remove(rtl)
+    rtl = rPr.makeelement(qn("w:rtl"), {})
+    rPr.append(rtl)
+
+
+def _set_run_ltr(run) -> None:
+    """Explicitly apply left-to-right text formatting to a run."""
+    rPr = run._r.get_or_add_rPr()
+    rtl = rPr.find(qn("w:rtl"))
+    if rtl is not None:
+        rPr.remove(rtl)
+    rtl = rPr.makeelement(qn("w:rtl"), {qn("w:val"): "0"})
+    rPr.append(rtl)
 
 
 def _set_run_size_cs(run, font_size_pt: int) -> None:
@@ -208,6 +230,8 @@ def _add_styled_run(
         run.font.color.rgb = color
     if rtl and not code:
         _set_run_rtl(run)
+    else:
+        _set_run_ltr(run)
     return run
 
 
@@ -222,15 +246,26 @@ def _render_inline_tokens(
     """Render inline markdown tokens into runs of the paragraph."""
     bold_stack = [base_bold]
     italic_stack = [False]
-    code = False
+    ltr_stack = [False]
 
     for token in tokens:
         kind = token.type
+
+        if kind == "html_inline":
+            content_lower = token.content.lower()
+            if 'dir="ltr"' in content_lower or "dir='ltr'" in content_lower:
+                ltr_stack.append(True)
+            elif 'dir="rtl"' in content_lower or "dir='rtl'" in content_lower:
+                ltr_stack.append(False)
+            elif "</span" in content_lower and len(ltr_stack) > 1:
+                ltr_stack.pop()
+            continue
 
         if kind == "text":
             text = token.content
             if not text:
                 continue
+            is_rtl = options.rtl and (not ltr_stack[-1])
             _add_styled_run(
                 paragraph,
                 text,
@@ -238,11 +273,13 @@ def _render_inline_tokens(
                 font_size_pt=base_size,
                 bold=bold_stack[-1],
                 italic=italic_stack[-1],
-                rtl=options.rtl,
+                rtl=is_rtl,
             )
+            paragraph._link_has_text = True  # type: ignore[attr-defined]
 
         elif kind == "softbreak":
-            _add_styled_run(paragraph, " ", font_name=options.font_family, rtl=options.rtl)
+            is_rtl = options.rtl and (not ltr_stack[-1])
+            _add_styled_run(paragraph, " ", font_name=options.font_family, rtl=is_rtl)
 
         elif kind == "hardbreak":
             run = paragraph.add_run()
@@ -257,6 +294,7 @@ def _render_inline_tokens(
                 code=True,
                 rtl=False,
             )
+            paragraph._link_has_text = True  # type: ignore[attr-defined]
 
         elif kind == "strong_open":
             bold_stack.append(True)
@@ -272,14 +310,14 @@ def _render_inline_tokens(
 
         elif kind == "link_open":
             href = token.attrGet("href") or ""
-            run = paragraph.add_run()
-            # Store href in a "link" attribute marker; we'll emit the link target as plain text after.
-            # For simplicity, we just continue rendering link text; full hyperlink support is omitted.
+            # Store href in a marker; we'll emit the link target as plain text after if it contains text.
             paragraph._link_href = href  # type: ignore[attr-defined]
+            paragraph._link_has_text = False  # type: ignore[attr-defined]
 
         elif kind == "link_close":
             href = getattr(paragraph, "_link_href", None)
-            if href:
+            has_text = getattr(paragraph, "_link_has_text", False)
+            if href and has_text:
                 _add_styled_run(
                     paragraph,
                     f" ({href})",
@@ -288,20 +326,45 @@ def _render_inline_tokens(
                     color=RGBColor(0x07, 0x58, 0x85),
                     rtl=False,
                 )
-                paragraph._link_href = None  # type: ignore[attr-defined]
+            paragraph._link_href = None  # type: ignore[attr-defined]
+            paragraph._link_has_text = False  # type: ignore[attr-defined]
 
         elif kind == "image":
             alt = token.content or token.attrGet("alt") or ""
             src = token.attrGet("src") or ""
-            _add_styled_run(
-                paragraph,
-                f"[تصویر: {alt or src}]",
-                font_name=options.font_family,
-                font_size_pt=base_size,
-                italic=True,
-                color=RGBColor(0x6B, 0x72, 0x80),
-                rtl=options.rtl,
-            )
+            embedded = False
+
+            if src and not src.startswith(("http://", "https://", "data:")):
+                candidate = (options.source_path.parent / src).resolve()
+                if not candidate.is_file():
+                    candidate = Path(src).resolve()
+
+                if candidate.is_file():
+                    try:
+                        from docx.image.image import Image as DocxImage
+
+                        img = DocxImage.from_file(str(candidate))
+                        css_width = img.px_width / 96.0
+                        target_w = min(css_width, options.image_max_width_inches)
+                        if target_w < 1.0:
+                            target_w = css_width
+
+                        run = paragraph.add_run()
+                        run.add_picture(str(candidate), width=Inches(target_w))
+                        embedded = True
+                    except Exception:
+                        embedded = False
+
+            if not embedded:
+                _add_styled_run(
+                    paragraph,
+                    f"[تصویر: {alt or src}]",
+                    font_name=options.font_family,
+                    font_size_pt=base_size,
+                    italic=True,
+                    color=RGBColor(0x6B, 0x72, 0x80),
+                    rtl=options.rtl,
+                )
 
         elif kind == "s_open":
             # strikethrough not commonly used; ignore for now
@@ -334,7 +397,7 @@ def extract_mermaid_blocks(text: str) -> tuple[str, list[str]]:
 
 
 def _build_renderer() -> MarkdownIt:
-    renderer = MarkdownIt("default", {"html": False, "breaks": True, "typographer": True})
+    renderer = MarkdownIt("default", {"html": True, "breaks": True, "typographer": True})
     renderer.enable("table")
     renderer.enable("strikethrough")
     return renderer
@@ -372,14 +435,24 @@ def _add_paragraph_block(
     inline_token: Token,
     options: DocxBuildOptions,
 ) -> None:
+    children = inline_token.children or []
+    visible_children = [
+        t for t in children
+        if t.type != "html_inline" and not (t.type == "text" and not t.content.strip())
+    ]
+    if not visible_children:
+        return
+
     paragraph = document.add_paragraph()
-    if options.rtl:
+    has_image = any(t.type == "image" for t in children)
+    if has_image:
+        paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    elif options.rtl:
         _set_paragraph_rtl(paragraph)
-        # Don't set jc=right; bidi handles RTL alignment in Word
 
     _render_inline_tokens(
         paragraph,
-        inline_token.children or [],
+        children,
         options,
         base_size=options.font_size_pt,
     )
@@ -392,6 +465,7 @@ def _add_code_block(
 ) -> None:
     paragraph = document.add_paragraph()
     paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
+    _set_paragraph_ltr(paragraph)
     paragraph.paragraph_format.left_indent = Inches(0.2)
     paragraph.paragraph_format.right_indent = Inches(0.2)
 
@@ -782,6 +856,10 @@ def build_docx(
 
         if kind == "table_open":
             i = _add_table_from_tokens(document, tokens, i, options)
+            continue
+
+        if kind == "html_block":
+            i += 1
             continue
 
         # Skip unknown tokens
