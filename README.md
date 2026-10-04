@@ -1,10 +1,10 @@
-<dev dir="rtl">
+<div dir="rtl">
 
 # fa-md-pdf
 
-یک ابزار خط فرمان پایتونی برای تبدیل فایل‌های Markdown فارسی/راست‌به‌چپ به PDF، با پشتیبانی از نمودارهای Mermaid.
+ابزار پایتونی برای تبدیل فایل‌های Markdown فارسی/راست‌به‌چپ به **PDF** یا **DOCX (Word)**، با پشتیبانی از نمودارهای Mermaid، رابط گرافیکی (GUI) و حالت کاملاً **آفلاین**.
 
-نسخه فعلی **offline-first** است. اگر پروژه این ساختار را داشته باشد، دستور ساده زیر بدون نیاز به اینترنت کار می‌کند:
+نسخه فعلی **offline-first** است. اگر پروژه ساختار زیر را داشته باشد، دستور ساده زیر بدون نیاز به اینترنت کار می‌کند:
 
 ```powershell
 fa-md-pdf .\docs
@@ -28,18 +28,21 @@ fa-md-pdf-project/
 
 ## قابلیت‌ها
 
-- تبدیل یک فایل Markdown به PDF با همان نام
-- تبدیل دسته‌ای همه فایل‌های Markdown داخل یک فولدر
+- تبدیل یک فایل Markdown به PDF یا DOCX
+- تبدیل دسته‌ای همه فایل‌های یک فولدر
 - پشتیبانی از `.md` و `.markdown`
 - پشتیبانی از زیرپوشه‌ها به‌صورت پیش‌فرض
-- پشتیبانی از فارسی و راست‌به‌چپ از طریق CSS
-- رندر نمودارهای Mermaid داخل PDF
+- پشتیبانی از فارسی و راست‌به‌چپ از طریق CSS و تنظیمات RTL در Word
+- رندر نمودارهای Mermaid داخل PDF و DOCX (به‌صورت تصویر PNG)
 - استفاده خودکار از `vendor/mermaid.min.js`
 - استفاده خودکار از فونت‌های `fonts/Vazirmatn-*.ttf`
 - استفاده خودکار از Chromium موجود در `browsers/`
 - خروجی کنار فایل اصلی یا در فولدر خروجی جداگانه
 - امکان تنظیم فونت، margin، اندازه صفحه، landscape و CSS سفارشی
 - امکان نگه‌داشتن HTML میانی برای عیب‌یابی
+- **رابط گرافیکی (GUI)** فارسی و راست‌به‌چپ با `tkinter`
+- **حالت بسته‌بندی Markdown با `<div dir="rtl">`** برای اصلاح فایل‌های موجود (`--wrap-rtl`)
+- خروجی exe مستقل برای ویندوز (CLI و GUI)
 
 ## نصب سریع در ویندوز
 
@@ -106,6 +109,28 @@ fonts\Vazirmatn-*.ttf
 browsers\
 ```
 
+## رابط گرافیکی (GUI)
+
+برای کاربرانی که خط فرمان را ترجیح نمی‌دهند، یک رابط گرافیکی فارسی/RTL با `tkinter` فراهم شده است:
+
+```powershell
+fa-md-pdf-gui
+```
+
+یا از طریق CLI:
+
+```powershell
+fa-md-pdf --gui
+```
+
+پنجره GUI شامل بخش‌های زیر است:
+- انتخاب فایل/فولدر ورودی و فولدر خروجی
+- انتخاب فرمت خروجی (PDF، DOCX، یا فقط بسته‌بندی RTL در Markdown)
+- تب‌های تنظیمات: **صفحه** (فرمت/حاشیه/جهت)، **فونت**، **Mermaid** (فایل/تم/timeout)، **DOCX** (کیفیت تصویر، اندازه فونت)، **پیشرفته** (پسوندها، CSS سفارشی، مرورگرها)
+- لاگ پیشرفت رنگی و دکمه انصراف
+
+GUI همان موتور تبدیل CLI را استفاده می‌کند و مسیرهای آفلاین (`browsers/`، `vendor/mermaid.min.js`، `fonts/`) را خودکار شناسایی می‌کند.
+
 ## تبدیل یک فایل
 
 ```powershell
@@ -134,6 +159,36 @@ fa-md-pdf .\docs -o .\pdf-output
 
 اگر ورودی فولدر باشد، ساختار زیرپوشه‌ها در خروجی حفظ می‌شود.
 
+## خروجی DOCX (Word)
+
+برای تولید فایل Word به‌جای PDF از `-f docx` استفاده کنید:
+
+```powershell
+fa-md-pdf .\docs -f docx -o .\docx-output
+```
+
+ویژگی‌های خروجی DOCX:
+- جهت RTL برای کل سند، شامل پاراگراف‌ها و عنوان‌ها
+- نمودارهای Mermaid به‌صورت تصویر PNG با کیفیت بالا داخل سند جای می‌گیرند
+- فونت پیش‌فرض از `--font-family` انتخاب می‌شود (تنها اولین خانواده مورد استفاده قرار می‌گیرد)
+
+تنظیمات اختصاصی DOCX:
+
+```powershell
+fa-md-pdf .\docs -f docx `
+  --docx-image-scale 3 `
+  --docx-image-min-width 4.0 `
+  --docx-image-max-width 6.5 `
+  --docx-font-size 12
+```
+
+| گزینه | توضیح | پیش‌فرض |
+|---|---|---|
+| `--docx-image-scale` | ضریب کیفیت تصویر Mermaid (۱ تا ۴) | `3` |
+| `--docx-image-min-width` | حداقل عرض تصویر (اینچ) | `4.0` |
+| `--docx-image-max-width` | حداکثر عرض تصویر (اینچ) | `6.5` |
+| `--docx-font-size` | اندازه فونت متن (پوینت) | `12` |
+
 ## تبدیل فقط فایل‌های مستقیم داخل فولدر
 
 ```powershell
@@ -152,6 +207,7 @@ fa-md-pdf .\docs --verbose
 
 ```text
 [fa-md-pdf] project root: E:\project\fa-md-pdf-project
+[fa-md-pdf] format:       pdf
 [fa-md-pdf] mermaid js:   E:\project\fa-md-pdf-project\vendor\mermaid.min.js
 [fa-md-pdf] font dir:     E:\project\fa-md-pdf-project\fonts
 [fa-md-pdf] browsers:     E:\project\fa-md-pdf-project\browsers
@@ -182,6 +238,18 @@ fa-md-pdf .\docs --mermaid-url "https://cdn.jsdelivr.net/npm/mermaid@11.15.0/dis
 
 این گزینه برای اجرای کاملاً آفلاین توصیه نمی‌شود.
 
+## گزینه‌های Mermaid
+
+```powershell
+fa-md-pdf .\docs --mermaid-theme neutral --mermaid-timeout 45000
+```
+
+| گزینه | توضیح | پیش‌فرض |
+|---|---|---|
+| `--mermaid-theme` | یکی از `default`, `base`, `dark`, `forest`, `neutral`, `null` | `default` |
+| `--mermaid-timeout` | timeout رندر هر دیاگرام (میلی‌ثانیه) | `30000` |
+| `--ignore-mermaid-errors` | ادامه تبدیل حتی در صورت خطای Mermaid | غیر فعال |
+
 ## گزینه‌های کاربردی
 
 ```powershell
@@ -208,11 +276,36 @@ fa-md-pdf .\docs --fail-fast
 
 در تبدیل دسته‌ای، با اولین خطا متوقف می‌شود.
 
+## بسته‌بندی Markdown با `<div dir="rtl">`
+
+برای اصلاح فایل‌های Markdown موجود (مثلاً برای نمایش درست در GitHub یا VSCode) و افزودن خودکار `<div dir="rtl">...</div>` به بلوک‌های فارسی:
+
 ```powershell
-fa-md-pdf .\docs --ignore-mermaid-errors
+fa-md-pdf .\docs --wrap-rtl
 ```
 
-اگر Mermaid خطا بدهد، تبدیل ادامه پیدا می‌کند و هشدار چاپ می‌شود.
+ویژگی‌ها:
+- بلوک‌های کد و wrapperهای موجود دست‌نخورده باقی می‌مانند
+- ایدمپوتنت است (اجرای دوباره خروجی یکسان می‌دهد)
+- در حالت پیش‌فرض، فایل کنار فایل اصلی با پسوند `.rtl` ذخیره می‌شود (`file.md → file.rtl.md`)
+
+تغییر پسوند:
+
+```powershell
+fa-md-pdf .\docs --wrap-rtl --wrap-rtl-suffix ".out"
+```
+
+برای بازنویسی روی همان فایل:
+
+```powershell
+fa-md-pdf .\docs --wrap-rtl --wrap-rtl-suffix ""
+```
+
+نوشتن خروجی در فولدر جدا (ساختار زیرپوشه‌ها حفظ می‌شود):
+
+```powershell
+fa-md-pdf .\docs --wrap-rtl -o .\docs-rtl
+```
 
 ## نمونه Mermaid
 
@@ -228,28 +321,63 @@ flowchart TD
 ```
 ````
 
+## ساخت فایل exe مستقل
+
+برای تولید نسخه‌های قابل توزیع `fa-md-pdf.exe` (CLI) و `fa-md-pdf-gui.exe` (GUI):
+
+```powershell
+.\scripts\build-exe.ps1
+```
+
+اسکریپت به‌طور خودکار `pyinstaller` را در صورت نیاز نصب می‌کند و دو فایل را تولید می‌کند:
+
+```text
+dist\fa-md-pdf.exe         # رابط خط فرمان
+dist\fa-md-pdf-gui.exe     # رابط گرافیکی
+```
+
+### استفاده از exe
+
+```powershell
+.\dist\fa-md-pdf.exe .\docs              # تبدیل از CLI
+.\dist\fa-md-pdf.exe --gui               # باز کردن GUI از CLI
+.\dist\fa-md-pdf-gui.exe                 # باز کردن مستقیم GUI
+```
+
+برای اجرای آفلاین، فولدرهای `browsers/`، `fonts/` و `vendor/` را کنار فایل exe قرار دهید.
+
 ## ساختار پروژه
 
 ```text
 fa-md-pdf-project/
-  browsers/                 # Chromium مخصوص Playwright، برای اجرای آفلاین
-  fonts/                    # فونت‌های فارسی
-  vendor/mermaid.min.js     # Mermaid آفلاین
+  browsers/                       # Chromium مخصوص Playwright، برای اجرای آفلاین
+  fonts/                          # فونت‌های فارسی
+  vendor/mermaid.min.js           # Mermaid آفلاین
   src/fa_md_pdf/
-    cli.py
-    converter.py
-    defaults.py
-    html_builder.py
-    assets/default.css
+    cli.py                        # رابط خط فرمان
+    gui.py                        # رابط گرافیکی tkinter
+    converter.py                  # موتور تبدیل (PDF و DOCX)
+    docx_builder.py               # تولید سند Word با RTL
+    mermaid_renderer.py           # رندر Mermaid به PNG برای DOCX
+    html_builder.py               # تبدیل Markdown به HTML
+    rtl_wrapper.py                # بسته‌بندی Persian با <div dir="rtl">
+    defaults.py                   # تشخیص project root و دارایی‌های آفلاین
+    assets/default.css            # CSS پایه RTL
   examples/
     sample-fa.md
   docs/
     USAGE.md
     ARCHITECTURE.md
-    OFFLINE.md
+    CHANGELOG.md
+    GUI-PROPOSAL.md
   scripts/
     setup-windows.ps1
+    build-exe.ps1                 # ساخت فایل‌های exe با PyInstaller
   tests/
+  fa-md-pdf.spec                  # PyInstaller spec برای CLI
+  fa-md-pdf-gui.spec              # PyInstaller spec برای GUI
+  entry_point.py                  # نقطه ورود exe برای CLI
+  entry_point_gui.py              # نقطه ورود exe برای GUI
   pyproject.toml
   requirements.txt
   README.md
@@ -288,6 +416,14 @@ vendor\mermaid.min.js
 
 مطمئن شوید فونت‌ها داخل فولدر `fonts` هستند. برنامه فایل‌های `Vazirmatn-*.ttf` را خودکار داخل CSS embed می‌کند.
 
+### فونت فارسی در DOCX درست نمایش داده نمی‌شود
+
+DOCX نام فونت سیستمی را استفاده می‌کند، نه فایل embed شده. اطمینان حاصل کنید فونت Vazirmatn (یا فونت انتخابی شما) روی سیستم بازکننده فایل نصب باشد، یا با `--font-family` فونت موجود روی سیستم را انتخاب کنید:
+
+```powershell
+fa-md-pdf .\docs -f docx --font-family "Tahoma"
+```
+
 ### عکس‌های نسبی داخل Markdown پیدا نمی‌شوند
 
 مسیر عکس‌ها را نسبت به همان فایل Markdown بنویسید. برنامه برای هر فایل، مسیر پایه HTML را فولدر همان فایل قرار می‌دهد.
@@ -304,3 +440,5 @@ pytest
 ## مجوز
 
 MIT
+
+</div>

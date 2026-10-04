@@ -129,9 +129,9 @@ class MainWindow:
         self._auto_detect_assets()
 
     def _setup_window(self) -> None:
-        self.root.title("fa-md-pdf - تبدیل مارک‌داون به PDF")
-        self.root.geometry("850x700")
-        self.root.minsize(750, 600)
+        self.root.title("fa-md-pdf - تبدیل مارک‌داون به PDF و DOCX")
+        self.root.geometry("900x780")
+        self.root.minsize(800, 650)
 
     def _setup_fonts(self) -> None:
         available = font.families()
@@ -210,6 +210,28 @@ class MainWindow:
         frame = ttk.LabelFrame(parent, text="  خروجی  ", padding=8)
         frame.pack(fill=tk.X, pady=(0, 6))
 
+        # Format selector row
+        row_format = ttk.Frame(frame)
+        row_format.pack(fill=tk.X, pady=(0, 4))
+
+        ttk.Label(row_format, text="فرمت خروجی:", font=self.ui_font_bold).pack(side=tk.RIGHT)
+
+        self.format_var = tk.StringVar(value="pdf")
+        ttk.Radiobutton(
+            row_format, text="PDF", variable=self.format_var, value="pdf",
+            command=self._on_format_changed,
+        ).pack(side=tk.RIGHT, padx=8)
+        ttk.Radiobutton(
+            row_format, text="DOCX (Word)", variable=self.format_var, value="docx",
+            command=self._on_format_changed,
+        ).pack(side=tk.RIGHT, padx=8)
+        ttk.Radiobutton(
+            row_format, text="Markdown با RTL",
+            variable=self.format_var, value="wrap-rtl",
+            command=self._on_format_changed,
+        ).pack(side=tk.RIGHT, padx=8)
+
+        # Output path row
         row = ttk.Frame(frame)
         row.pack(fill=tk.X)
 
@@ -219,6 +241,19 @@ class MainWindow:
 
         btn = ttk.Button(row, text="انتخاب...", command=self._pick_output_dir)
         btn.pack(side=tk.RIGHT, padx=2)
+
+    def _on_format_changed(self) -> None:
+        # Enable/disable DOCX-only settings visually if needed
+        is_docx = self.format_var.get() == "docx"
+        # The DOCX tab is always visible, but we could enable/disable controls.
+        # For now, just update state of any related widgets.
+        if hasattr(self, "_docx_tab_widgets"):
+            state = "normal" if is_docx else "disabled"
+            for widget in self._docx_tab_widgets:
+                try:
+                    widget.configure(state=state)
+                except tk.TclError:
+                    pass
 
     def _pick_output_dir(self) -> None:
         path = filedialog.askdirectory(title="انتخاب فولدر خروجی")
@@ -238,6 +273,7 @@ class MainWindow:
         self._build_page_tab(notebook)
         self._build_font_tab(notebook)
         self._build_mermaid_tab(notebook)
+        self._build_docx_tab(notebook)
         self._build_advanced_tab(notebook)
 
     def _build_page_tab(self, notebook: ttk.Notebook) -> None:
@@ -392,6 +428,61 @@ class MainWindow:
         )
         if path:
             self.mermaid_js_var.set(str(Path(path).resolve()))
+
+    def _build_docx_tab(self, notebook: ttk.Notebook) -> None:
+        tab = ttk.Frame(notebook, padding=8)
+        notebook.add(tab, text="  DOCX  ")
+
+        # Info label
+        info = ttk.Label(
+            tab,
+            text="این تنظیمات فقط هنگام انتخاب فرمت DOCX اعمال می‌شوند.",
+            font=self.ui_font, foreground="#6b7280",
+        )
+        info.pack(anchor=tk.E, pady=(0, 6))
+
+        # Image scale (quality)
+        row1 = ttk.Frame(tab)
+        row1.pack(fill=tk.X, pady=2)
+        ttk.Label(row1, text="کیفیت تصویر نمودار:", font=self.ui_font).pack(side=tk.RIGHT)
+        self.docx_image_scale_var = tk.StringVar(value="3")
+        scale_combo = ttk.Combobox(
+            row1, textvariable=self.docx_image_scale_var,
+            values=["1", "2", "3", "4"],
+            state="readonly", width=6,
+        )
+        scale_combo.pack(side=tk.RIGHT, padx=8)
+        ttk.Label(
+            row1, text="(۱=کم، ۳=پیش‌فرض، ۴=بالا)",
+            font=self.ui_font, foreground="#6b7280",
+        ).pack(side=tk.RIGHT, padx=4)
+
+        # Min image width
+        row2 = ttk.Frame(tab)
+        row2.pack(fill=tk.X, pady=2)
+        ttk.Label(row2, text="حداقل عرض تصویر (اینچ):", font=self.ui_font).pack(side=tk.RIGHT)
+        self.docx_image_min_width_var = tk.StringVar(value="4.0")
+        ttk.Entry(
+            row2, textvariable=self.docx_image_min_width_var, width=10, justify="right"
+        ).pack(side=tk.RIGHT, padx=8)
+
+        # Max image width
+        row3 = ttk.Frame(tab)
+        row3.pack(fill=tk.X, pady=2)
+        ttk.Label(row3, text="حداکثر عرض تصویر (اینچ):", font=self.ui_font).pack(side=tk.RIGHT)
+        self.docx_image_max_width_var = tk.StringVar(value="6.5")
+        ttk.Entry(
+            row3, textvariable=self.docx_image_max_width_var, width=10, justify="right"
+        ).pack(side=tk.RIGHT, padx=8)
+
+        # Body font size
+        row4 = ttk.Frame(tab)
+        row4.pack(fill=tk.X, pady=2)
+        ttk.Label(row4, text="اندازه فونت متن (پوینت):", font=self.ui_font).pack(side=tk.RIGHT)
+        self.docx_font_size_var = tk.StringVar(value="12")
+        ttk.Entry(
+            row4, textvariable=self.docx_font_size_var, width=10, justify="right"
+        ).pack(side=tk.RIGHT, padx=8)
 
     def _build_advanced_tab(self, notebook: ttk.Notebook) -> None:
         tab = ttk.Frame(notebook, padding=8)
@@ -578,6 +669,24 @@ class MainWindow:
         except ValueError:
             timeout = 30_000
 
+        # DOCX-specific options
+        try:
+            docx_image_scale = int(self.docx_image_scale_var.get().strip())
+        except ValueError:
+            docx_image_scale = 3
+        try:
+            docx_image_min_width = float(self.docx_image_min_width_var.get().strip())
+        except ValueError:
+            docx_image_min_width = 4.0
+        try:
+            docx_image_max_width = float(self.docx_image_max_width_var.get().strip())
+        except ValueError:
+            docx_image_max_width = 6.5
+        try:
+            docx_font_size = int(self.docx_font_size_var.get().strip())
+        except ValueError:
+            docx_font_size = 12
+
         return ConvertOptions(
             font_family=self.font_family_var.get(),
             font_file=font_file,
@@ -592,11 +701,21 @@ class MainWindow:
             keep_html=self.keep_html_var.get(),
             ignore_mermaid_errors=self.ignore_mermaid_errors_var.get(),
             verbose=False,
+            output_format=self.format_var.get(),
+            docx_font_size_pt=docx_font_size,
+            docx_image_scale=docx_image_scale,
+            docx_image_min_width=docx_image_min_width,
+            docx_image_max_width=docx_image_max_width,
         )
 
     def _start_conversion(self) -> None:
         input_path = self._validate_input()
         if input_path is None:
+            return
+
+        # Wrap-RTL mode: transform Markdown without conversion
+        if self.format_var.get() == "wrap-rtl":
+            self._run_wrap_rtl(input_path)
             return
 
         # Validate mermaid
@@ -644,6 +763,7 @@ class MainWindow:
                 recursive=self.recursive_var.get(),
                 extensions=extensions,
                 keep_html=self.keep_html_var.get(),
+                output_format=self.format_var.get(),
             )
         except ConversionError as exc:
             messagebox.showerror("خطا", str(exc))
@@ -670,6 +790,77 @@ class MainWindow:
         )
         self.conversion_thread.start()
         self._poll_progress()
+
+    def _run_wrap_rtl(self, input_path: Path) -> None:
+        """Run the wrap-rtl Markdown transformation (no PDF/DOCX conversion)."""
+        from .converter import discover_markdown_files
+        from .rtl_wrapper import WrapOptions, wrap_rtl_in_markdown
+
+        extensions = normalize_extensions(self.extensions_var.get().split())
+
+        if input_path.is_file():
+            if input_path.suffix.lower() not in extensions:
+                messagebox.showerror("خطا", f"این فایل یک Markdown نیست: {input_path}")
+                return
+            sources = [input_path]
+            input_root = None
+        elif input_path.is_dir():
+            sources = discover_markdown_files(
+                input_path, recursive=self.recursive_var.get(), extensions=extensions
+            )
+            input_root = input_path
+        else:
+            messagebox.showerror("خطا", f"مسیر نامعتبر: {input_path}")
+            return
+
+        if not sources:
+            messagebox.showinfo("اطلاع", "هیچ فایل Markdown‌ای پیدا نشد.")
+            return
+
+        output_str = self.output_var.get().strip()
+        output = Path(output_str).resolve() if output_str else None
+
+        self._clear_log()
+        self._log(f"شروع تبدیل Markdown به نسخه RTL ({len(sources)} فایل)...", "info")
+
+        options = WrapOptions(enabled=True)
+        successes = 0
+        failures = 0
+
+        for source in sources:
+            try:
+                text = source.read_text(encoding="utf-8-sig")
+                transformed = wrap_rtl_in_markdown(text, options)
+                destination = self._resolve_wrap_rtl_output(source, output, input_root)
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                destination.write_text(transformed, encoding="utf-8")
+                self._log(f"✓ {source.name} → {destination.name}", "success")
+                successes += 1
+            except Exception as exc:  # noqa: BLE001
+                self._log(f"✗ {source.name} - خطا: {exc}", "error")
+                failures += 1
+                if self.fail_fast_var.get():
+                    break
+
+        self._log("─" * 40)
+        self._log(f"نتیجه: {successes} موفق، {failures} ناموفق", "summary")
+
+    @staticmethod
+    def _resolve_wrap_rtl_output(
+        source: Path, output: Path | None, input_root: Path | None
+    ) -> Path:
+        """Compute output path for wrap-rtl transform in GUI mode."""
+        if output is None:
+            # Default: write next to source with .rtl suffix
+            return source.with_suffix(f".rtl{source.suffix}")
+
+        if input_root is None:
+            if output.suffix.lower() in {".md", ".markdown"}:
+                return output
+            return output / source.name
+
+        relative = source.relative_to(input_root)
+        return output / relative
 
     def _cancel_conversion(self) -> None:
         self.cancel_event.set()

@@ -201,6 +201,25 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Launch the graphical user interface instead of converting.",
     )
+    parser.add_argument(
+        "--wrap-rtl",
+        action="store_true",
+        help=(
+            "Transform Markdown files to wrap Persian/Arabic text blocks with "
+            "<div dir='rtl'>...</div> for correct browser rendering. "
+            "Code blocks and existing RTL wrappers are left untouched. "
+            "When used alone, the transform is applied in-place (or to --output) "
+            "without converting to PDF/DOCX."
+        ),
+    )
+    parser.add_argument(
+        "--wrap-rtl-suffix",
+        default=".rtl",
+        help=(
+            "Suffix added before the file extension when writing the wrapped file in-place. "
+            "Default: '.rtl' (so file.md -> file.rtl.md). Use empty string to overwrite."
+        ),
+    )
 
     return parser
 
@@ -274,6 +293,85 @@ def resolve_browsers_setting(args: argparse.Namespace, project_root: Path) -> Pa
     return None
 
 
+def _run_wrap_rtl(args: argparse.Namespace) -> int:
+    """Transform Markdown files by wrapping Persian text in <div dir='rtl'>."""
+    from .rtl_wrapper import WrapOptions, wrap_rtl_in_markdown
+
+    input_path = args.input.resolve()
+    if not input_path.exists():
+        print(f"Error: input does not exist: {input_path}", file=sys.stderr)
+        return 1
+
+    extensions = normalize_extensions(args.extensions)
+
+    if input_path.is_file():
+        if input_path.suffix.lower() not in extensions:
+            print(
+                f"Error: input is not a Markdown file: {input_path}", file=sys.stderr
+            )
+            return 1
+        sources = [input_path]
+        input_root = None
+    elif input_path.is_dir():
+        from .converter import discover_markdown_files
+        sources = discover_markdown_files(input_path, recursive=args.recursive, extensions=extensions)
+        input_root = input_path
+    else:
+        print(f"Error: invalid input: {input_path}", file=sys.stderr)
+        return 1
+
+    if not sources:
+        print("No Markdown files found.", file=sys.stderr)
+        return 2
+
+    output = args.output.resolve() if args.output else None
+    suffix = args.wrap_rtl_suffix
+
+    options = WrapOptions(enabled=True)
+    successes = 0
+    failures = 0
+
+    for source in sources:
+        try:
+            text = source.read_text(encoding="utf-8-sig")
+            transformed = wrap_rtl_in_markdown(text, options)
+            destination = _resolve_wrap_rtl_output(source, output, input_root, suffix)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_text(transformed, encoding="utf-8")
+            print(f"OK  {source} -> {destination}")
+            successes += 1
+        except Exception as exc:  # noqa: BLE001
+            print(f"ERR {source}", file=sys.stderr)
+            print(f"    {exc}", file=sys.stderr)
+            failures += 1
+            if args.fail_fast:
+                break
+
+    print(f"Done: {successes} succeeded, {failures} failed.")
+    return 1 if failures else 0
+
+
+def _resolve_wrap_rtl_output(
+    source: Path, output: Path | None, input_root: Path | None, suffix: str
+) -> Path:
+    """Compute output path for wrap-rtl transform."""
+    if output is None:
+        # In-place: write next to source with a suffix before .md
+        if suffix:
+            return source.with_suffix(f"{suffix}{source.suffix}")
+        return source
+
+    if input_root is None:
+        # Single file with explicit output
+        if output.suffix.lower() in {".md", ".markdown"}:
+            return output
+        return output / source.name
+
+    # Directory mode: preserve subdirectory structure
+    relative = source.relative_to(input_root)
+    return output / relative
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -286,6 +384,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.input is None:
         parser.error("the following arguments are required: input (or use --gui)")
+
+    if args.wrap_rtl:
+        return _run_wrap_rtl(args)
 
     try:
         project_root = find_project_root(args.input)

@@ -72,6 +72,36 @@ def _set_run_rtl(run) -> None:
         rPr.append(rtl)
 
 
+def _set_run_size_cs(run, font_size_pt: int) -> None:
+    """Set complex-script font size (szCs) used for Arabic/Persian text in Word."""
+    rPr = run._r.get_or_add_rPr()
+    # Word stores size in half-points
+    half_pts = str(int(font_size_pt * 2))
+    szCs = rPr.find(qn("w:szCs"))
+    if szCs is None:
+        szCs = rPr.makeelement(qn("w:szCs"), {})
+        rPr.append(szCs)
+    szCs.set(qn("w:val"), half_pts)
+
+
+def _set_run_bold_cs(run) -> None:
+    """Set complex-script bold (bCs) used for Arabic/Persian text in Word."""
+    rPr = run._r.get_or_add_rPr()
+    bCs = rPr.find(qn("w:bCs"))
+    if bCs is None:
+        bCs = rPr.makeelement(qn("w:bCs"), {})
+        rPr.append(bCs)
+
+
+def _set_run_italic_cs(run) -> None:
+    """Set complex-script italic (iCs) used for Arabic/Persian text in Word."""
+    rPr = run._r.get_or_add_rPr()
+    iCs = rPr.find(qn("w:iCs"))
+    if iCs is None:
+        iCs = rPr.makeelement(qn("w:iCs"), {})
+        rPr.append(iCs)
+
+
 def _set_run_font(run, font_name: str, complex_script_font: str | None = None) -> None:
     """Set the font for both ASCII and complex script (Arabic/Persian)."""
     run.font.name = font_name
@@ -165,10 +195,15 @@ def _add_styled_run(
         _set_run_font(run, font_name)
     if font_size_pt is not None:
         run.font.size = Pt(font_size_pt)
+        # Word reads size from szCs for RTL/Arabic/Persian text
+        _set_run_size_cs(run, font_size_pt)
     if bold:
         run.bold = True
+        # Word reads bold from bCs for RTL text
+        _set_run_bold_cs(run)
     if italic:
         run.italic = True
+        _set_run_italic_cs(run)
     if color is not None:
         run.font.color.rgb = color
     if rtl and not code:
