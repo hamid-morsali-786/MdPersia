@@ -122,6 +122,11 @@ class MainWindow:
         self.progress_queue: queue.Queue[ProgressEvent] = queue.Queue()
         self.cancel_event = threading.Event()
         self.conversion_thread: ConversionThread | None = None
+        self.is_watching = False
+        self._watch_timer_id: str | None = None
+        self._watched_jobs: list[ConvertJob] = []
+        self._watched_options: ConvertOptions | None = None
+        self._watched_mtimes: dict[Path, float] = {}
 
         self._setup_window()
         self._setup_fonts()
@@ -308,6 +313,14 @@ class MainWindow:
             side=tk.RIGHT
         )
 
+        # Page numbers
+        row4 = ttk.Frame(tab)
+        row4.pack(fill=tk.X, pady=2)
+        self.pdf_page_numbers_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(
+            row4, text="شماره‌گذاری صفحات در پابرگ PDF (صفحه X از Y)", variable=self.pdf_page_numbers_var
+        ).pack(side=tk.RIGHT)
+
     def _build_font_tab(self, notebook: ttk.Notebook) -> None:
         tab = ttk.Frame(notebook, padding=8)
         notebook.add(tab, text="  فونت  ")
@@ -484,6 +497,36 @@ class MainWindow:
             row4, textvariable=self.docx_font_size_var, width=10, justify="right"
         ).pack(side=tk.RIGHT, padx=8)
 
+        # Syntax highlighting
+        row5 = ttk.Frame(tab)
+        row5.pack(fill=tk.X, pady=2)
+        self.docx_highlight_code_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(
+            row5,
+            text="رنگ‌آمیزی هوشمند کدهای برنامه‌نویسی (Syntax Highlighting)",
+            variable=self.docx_highlight_code_var,
+        ).pack(side=tk.RIGHT)
+
+        # Page numbers
+        row6 = ttk.Frame(tab)
+        row6.pack(fill=tk.X, pady=2)
+        self.docx_page_numbers_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(
+            row6,
+            text="شماره‌گذاری خودکار صفحات در پابرگ (صفحه X از Y)",
+            variable=self.docx_page_numbers_var,
+        ).pack(side=tk.RIGHT)
+
+        # Feature badges
+        badge_frame = ttk.Frame(tab)
+        badge_frame.pack(fill=tk.X, pady=(6, 2))
+        ttk.Label(
+            badge_frame,
+            text="✓ پشتیبانی بومی از جعبه‌های نکته/هشدار ([!NOTE], [!WARNING], ...) و لینک‌های واقعی فعال است.",
+            font=self.ui_font,
+            foreground="#16a34a",
+        ).pack(side=tk.RIGHT)
+
     def _build_advanced_tab(self, notebook: ttk.Notebook) -> None:
         tab = ttk.Frame(notebook, padding=8)
         notebook.add(tab, text="  پیشرفته  ")
@@ -566,6 +609,15 @@ class MainWindow:
             frame, text="⏹ انصراف", command=self._cancel_conversion, state="disabled"
         )
         self.cancel_btn.pack(side=tk.RIGHT, padx=4)
+
+        self.watch_var = tk.BooleanVar(value=False)
+        self.watch_check = ttk.Checkbutton(
+            frame,
+            text="👁️ پایش خودکار تغییرات (Watch Mode)",
+            variable=self.watch_var,
+            command=self._on_watch_toggled,
+        )
+        self.watch_check.pack(side=tk.RIGHT, padx=12)
 
     # ─── Progress Panel ────────────────────────────────────────────
 
@@ -687,6 +739,14 @@ class MainWindow:
         except ValueError:
             docx_font_size = 12
 
+        is_docx = self.format_var.get() == "docx"
+        include_pages = (
+            self.docx_page_numbers_var.get()
+            if is_docx
+            else self.pdf_page_numbers_var.get()
+        )
+        highlight_code = self.docx_highlight_code_var.get()
+
         return ConvertOptions(
             font_family=self.font_family_var.get(),
             font_file=font_file,
@@ -706,6 +766,8 @@ class MainWindow:
             docx_image_scale=docx_image_scale,
             docx_image_min_width=docx_image_min_width,
             docx_image_max_width=docx_image_max_width,
+            include_page_numbers=include_pages,
+            highlight_code=highlight_code,
         )
 
     def _start_conversion(self) -> None:
@@ -782,6 +844,10 @@ class MainWindow:
         self.cancel_event.clear()
 
         options = self._build_convert_options()
+        self._watched_jobs = jobs
+        self._watched_options = options
+        self._record_watched_mtimes()
+
         self.conversion_thread = ConversionThread(
             jobs=jobs,
             options=options,
@@ -863,8 +929,90 @@ class MainWindow:
         return output / relative
 
     def _cancel_conversion(self) -> None:
+        if self.is_watching:
+            self.is_watching = False
+            self.watch_var.set(False)
+            if self._watch_timer_id:
+                try:
+                    self.root.after_cancel(self._watch_timer_id)
+                except Exception:
+                    pass
+                self._watch_timer_id = None
+            if self.conversion_thread and self.conversion_thread.is_alive():
+                self.cancel_event.set()
+            self.convert_btn.configure(state="normal", text="🔄 تبدیل")
+            self.cancel_btn.configure(state="disabled", text="⏹ انصراف")
+            self._log("⏹ پایش خودکار متوقف شد.", "info")
+            return
+
         self.cancel_event.set()
         self._log("در حال لغو...", "info")
+
+    def _on_watch_toggled(self) -> None:
+        if not self.watch_var.get() and self.is_watching:
+            self._cancel_conversion()
+
+    def _record_watched_mtimes(self) -> None:
+        self._watched_mtimes.clear()
+        for job in self._watched_jobs:
+            if job.source.is_file():
+                try:
+                    self._watched_mtimes[job.source] = job.source.stat().st_mtime
+                except OSError:
+                    pass
+
+    def _schedule_watch_poll(self) -> None:
+        if self._watch_timer_id:
+            try:
+                self.root.after_cancel(self._watch_timer_id)
+            except Exception:
+                pass
+        self._watch_timer_id = self.root.after(1000, self._watch_poll)
+
+    def _watch_poll(self) -> None:
+        self._watch_timer_id = None
+        if not self.is_watching or not self.watch_var.get():
+            return
+
+        if self.conversion_thread and self.conversion_thread.is_alive():
+            self._schedule_watch_poll()
+            return
+
+        changed_sources: list[Path] = []
+        for job in self._watched_jobs:
+            if job.source.is_file():
+                try:
+                    current_mtime = job.source.stat().st_mtime
+                    old_mtime = self._watched_mtimes.get(job.source, 0)
+                    if current_mtime > old_mtime:
+                        self._watched_mtimes[job.source] = current_mtime
+                        changed_sources.append(job.source)
+                except OSError:
+                    pass
+
+        if changed_sources and self._watched_options:
+            import datetime
+
+            now_str = datetime.datetime.now().strftime("%H:%M:%S")
+            names = ", ".join(s.name for s in changed_sources[:3])
+            if len(changed_sources) > 3:
+                names += f" و {len(changed_sources) - 3} فایل دیگر"
+            self._log(f"[{now_str}] تغییر در {names} شناسایی شد. تبدیل مجدد...", "info")
+
+            self.cancel_event.clear()
+            self.convert_btn.configure(state="disabled")
+            self.cancel_btn.configure(state="normal", text="⏹ توقف پایش")
+            self.conversion_thread = ConversionThread(
+                jobs=self._watched_jobs,
+                options=self._watched_options,
+                progress_queue=self.progress_queue,
+                cancel_event=self.cancel_event,
+            )
+            self.conversion_thread.start()
+            self._poll_progress()
+            return
+
+        self._schedule_watch_poll()
 
     def _poll_progress(self) -> None:
         try:
@@ -884,8 +1032,21 @@ class MainWindow:
                     self._handle_progress_event(event)
             except queue.Empty:
                 pass
-            self.convert_btn.configure(state="normal")
-            self.cancel_btn.configure(state="disabled")
+
+            if self.watch_var.get() and not self.cancel_event.is_set():
+                self.is_watching = True
+                self.convert_btn.configure(state="normal", text="🔄 تبدیل مجدد")
+                self.cancel_btn.configure(state="normal", text="⏹ توقف پایش")
+                self._log(
+                    "👁️ پایش خودکار فعال شد. در صورت تغییر و ذخیره فایل‌ها، تبدیل خودکار اجرا می‌شود.",
+                    "info",
+                )
+                self._record_watched_mtimes()
+                self._schedule_watch_poll()
+            else:
+                self.is_watching = False
+                self.convert_btn.configure(state="normal", text="🔄 تبدیل")
+                self.cancel_btn.configure(state="disabled", text="⏹ انصراف")
 
     def _handle_progress_event(self, event: ProgressEvent) -> None:
         if event.event_type == "start":

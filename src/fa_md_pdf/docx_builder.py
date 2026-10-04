@@ -45,6 +45,8 @@ class DocxBuildOptions:
     image_scale: int = 3                  # device scale factor used for the PNGs
     image_min_width_inches: float = 4.0   # minimum image width in document
     image_max_width_inches: float = 6.5   # maximum image width in document
+    include_page_numbers: bool = True
+    highlight_code: bool = True
 
 
 @dataclass(frozen=True)
@@ -551,7 +553,7 @@ def _add_code_block(
     # Attempt Pygments syntax highlighting
     tokens = None
     clean_lang = (lang or "").strip().lower().split()[0] if (lang or "").strip() else ""
-    if clean_lang:
+    if options.highlight_code and clean_lang:
         try:
             from pygments.lexers import get_lexer_by_name
 
@@ -928,30 +930,31 @@ def build_docx(
             docGrid.set(qn("w:charSpace"), "0")
 
         # Dynamic Persian footer page numbering: "صفحه X از Y"
-        footer = section.footer
-        if footer.paragraphs:
-            f_p = footer.paragraphs[0]
-            f_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            if options.rtl:
-                _set_paragraph_rtl(f_p)
-            r_page = f_p.add_run("صفحه ")
-            _set_run_font(r_page, options.font_family)
-            r_page.font.size = Pt(9)
-            r_page.font.color.rgb = RGBColor(0x6B, 0x72, 0x80)
+        if options.include_page_numbers:
+            footer = section.footer
+            if footer.paragraphs:
+                f_p = footer.paragraphs[0]
+                f_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                if options.rtl:
+                    _set_paragraph_rtl(f_p)
+                r_page = f_p.add_run("صفحه ")
+                _set_run_font(r_page, options.font_family)
+                r_page.font.size = Pt(9)
+                r_page.font.color.rgb = RGBColor(0x6B, 0x72, 0x80)
 
-            from docx.oxml import parse_xml
+                from docx.oxml import parse_xml
 
-            f_p.add_run()._r.append(
-                parse_xml(r'<w:fldSimple xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" w:instr="PAGE"/>')
-            )
-            r_of = f_p.add_run(" از ")
-            _set_run_font(r_of, options.font_family)
-            r_of.font.size = Pt(9)
-            r_of.font.color.rgb = RGBColor(0x6B, 0x72, 0x80)
+                f_p.add_run()._r.append(
+                    parse_xml(r'<w:fldSimple xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" w:instr="PAGE"/>')
+                )
+                r_of = f_p.add_run(" از ")
+                _set_run_font(r_of, options.font_family)
+                r_of.font.size = Pt(9)
+                r_of.font.color.rgb = RGBColor(0x6B, 0x72, 0x80)
 
-            f_p.add_run()._r.append(
-                parse_xml(r'<w:fldSimple xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" w:instr="NUMPAGES"/>')
-            )
+                f_p.add_run()._r.append(
+                    parse_xml(r'<w:fldSimple xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" w:instr="NUMPAGES"/>')
+                )
 
     # Walk tokens
     i = 0
