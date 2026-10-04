@@ -235,6 +235,65 @@ def _add_styled_run(
     return run
 
 
+def _add_hyperlink_run(
+    paragraph: "Paragraph",
+    text: str,
+    href: str,
+    *,
+    font_name: str = DEFAULT_DOCX_FONT,
+    font_size_pt: int | None = None,
+    bold: bool = False,
+    italic: bool = False,
+    rtl: bool = True,
+) -> None:
+    """Add a native Word hyperlink to a paragraph."""
+    try:
+        from docx.opc.constants import RELATIONSHIP_TYPE
+        from docx.oxml import parse_xml
+        from docx.text.run import Run
+
+        part = paragraph.part
+        r_id = part.relate_to(href, RELATIONSHIP_TYPE.HYPERLINK, is_external=True)
+
+        hyperlink = parse_xml(
+            f'<w:hyperlink xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" '
+            f'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:id="{r_id}"/>'
+        )
+        run_xml = parse_xml(r'<w:r xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"/>')
+        hyperlink.append(run_xml)
+        paragraph._p.append(hyperlink)
+
+        run = Run(run_xml, paragraph)
+        run.text = text
+        _set_run_font(run, font_name)
+        if font_size_pt is not None:
+            run.font.size = Pt(font_size_pt)
+            _set_run_size_cs(run, font_size_pt)
+        if bold:
+            run.bold = True
+            _set_run_bold_cs(run)
+        if italic:
+            run.italic = True
+            _set_run_italic_cs(run)
+        run.underline = True
+        run.font.color.rgb = RGBColor(0x07, 0x58, 0x85)
+        if rtl:
+            _set_run_rtl(run)
+        else:
+            _set_run_ltr(run)
+    except Exception:
+        _add_styled_run(
+            paragraph,
+            text,
+            font_name=font_name,
+            font_size_pt=font_size_pt,
+            bold=bold,
+            italic=italic,
+            color=RGBColor(0x07, 0x58, 0x85),
+            rtl=rtl,
+        )
+
+
 def _render_inline_tokens(
     paragraph: "Paragraph",
     tokens: list[Token],
@@ -266,15 +325,28 @@ def _render_inline_tokens(
             if not text:
                 continue
             is_rtl = options.rtl and (not ltr_stack[-1])
-            _add_styled_run(
-                paragraph,
-                text,
-                font_name=options.font_family,
-                font_size_pt=base_size,
-                bold=bold_stack[-1],
-                italic=italic_stack[-1],
-                rtl=is_rtl,
-            )
+            link_href = getattr(paragraph, "_link_href", None)
+            if link_href:
+                _add_hyperlink_run(
+                    paragraph,
+                    text,
+                    link_href,
+                    font_name=options.font_family,
+                    font_size_pt=base_size,
+                    bold=bold_stack[-1],
+                    italic=italic_stack[-1],
+                    rtl=is_rtl,
+                )
+            else:
+                _add_styled_run(
+                    paragraph,
+                    text,
+                    font_name=options.font_family,
+                    font_size_pt=base_size,
+                    bold=bold_stack[-1],
+                    italic=italic_stack[-1],
+                    rtl=is_rtl,
+                )
             paragraph._link_has_text = True  # type: ignore[attr-defined]
 
         elif kind == "softbreak":
@@ -310,22 +382,11 @@ def _render_inline_tokens(
 
         elif kind == "link_open":
             href = token.attrGet("href") or ""
-            # Store href in a marker; we'll emit the link target as plain text after if it contains text.
+            # Store href in a marker
             paragraph._link_href = href  # type: ignore[attr-defined]
             paragraph._link_has_text = False  # type: ignore[attr-defined]
 
         elif kind == "link_close":
-            href = getattr(paragraph, "_link_href", None)
-            has_text = getattr(paragraph, "_link_has_text", False)
-            if href and has_text:
-                _add_styled_run(
-                    paragraph,
-                    f" ({href})",
-                    font_name=options.font_family,
-                    font_size_pt=base_size,
-                    color=RGBColor(0x07, 0x58, 0x85),
-                    rtl=False,
-                )
             paragraph._link_href = None  # type: ignore[attr-defined]
             paragraph._link_has_text = False  # type: ignore[attr-defined]
 
@@ -458,10 +519,20 @@ def _add_paragraph_block(
     )
 
 
+CALLOUT_CONFIGS = {
+    "NOTE": {"color": RGBColor(0x25, 0x63, 0xEB), "hex": "2563EB", "bg": "EFF6FF", "title": "💡 نکته:"},
+    "TIP": {"color": RGBColor(0x16, 0xA3, 0x4A), "hex": "16A34A", "bg": "F0FDF4", "title": "💡 راهنما:"},
+    "IMPORTANT": {"color": RGBColor(0x7C, 0x3A, 0xED), "hex": "7C3AED", "bg": "F5F3FF", "title": "📌 مهم:"},
+    "WARNING": {"color": RGBColor(0xD9, 0x77, 0x06), "hex": "D97706", "bg": "FFFBEB", "title": "⚠️ هشدار:"},
+    "CAUTION": {"color": RGBColor(0xDC, 0x26, 0x26), "hex": "DC2626", "bg": "FEF2F2", "title": "🛑 احتیاط:"},
+}
+
+
 def _add_code_block(
     document: "DocxDocument",
     code: str,
     options: DocxBuildOptions,
+    lang: str = "",
 ) -> None:
     paragraph = document.add_paragraph()
     paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
@@ -473,18 +544,69 @@ def _add_code_block(
     pPr = paragraph._p.get_or_add_pPr()
     shd = pPr.makeelement(
         qn("w:shd"),
-        {qn("w:val"): "clear", qn("w:color"): "auto", qn("w:fill"): "F3F4F6"},
+        {qn("w:val"): "clear", qn("w:color"): "auto", qn("w:fill"): "F8FAFC"},
     )
     pPr.append(shd)
 
-    _add_styled_run(
-        paragraph,
-        code.rstrip("\n"),
-        font_name=options.font_family,
-        font_size_pt=options.font_size_pt - 1,
-        code=True,
-        rtl=False,
-    )
+    # Attempt Pygments syntax highlighting
+    tokens = None
+    clean_lang = (lang or "").strip().lower().split()[0] if (lang or "").strip() else ""
+    if clean_lang:
+        try:
+            from pygments.lexers import get_lexer_by_name
+
+            lexer = get_lexer_by_name(clean_lang, stripall=False)
+            tokens = list(lexer.get_tokens(code.rstrip("\n")))
+        except Exception:
+            tokens = None
+
+    if tokens:
+        from pygments.token import Comment, Keyword, Name, Number, Operator, String
+
+        for ttype, val in tokens:
+            if not val:
+                continue
+            color = None
+            bold = False
+            italic = False
+            if ttype in Keyword or Keyword in ttype.split():
+                color = RGBColor(0x00, 0x70, 0x20)
+                bold = True
+            elif ttype in String or String in ttype.split():
+                color = RGBColor(0xBA, 0x21, 0x21)
+            elif ttype in Comment or Comment in ttype.split():
+                color = RGBColor(0x60, 0xA0, 0xB0)
+                italic = True
+            elif ttype in Number or Number in ttype.split():
+                color = RGBColor(0x20, 0x80, 0x50)
+            elif ttype in Name.Function or ttype in Name.Class:
+                color = RGBColor(0x06, 0x28, 0x7E)
+                bold = True
+            elif ttype in Name.Builtin:
+                color = RGBColor(0x00, 0x70, 0x20)
+            elif ttype in Operator:
+                color = RGBColor(0x55, 0x55, 0x55)
+
+            _add_styled_run(
+                paragraph,
+                val,
+                font_name=options.font_family,
+                font_size_pt=options.font_size_pt - 1,
+                bold=bold,
+                italic=italic,
+                color=color,
+                code=True,
+                rtl=False,
+            )
+    else:
+        _add_styled_run(
+            paragraph,
+            code.rstrip("\n"),
+            font_name=options.font_family,
+            font_size_pt=options.font_size_pt - 1,
+            code=True,
+            rtl=False,
+        )
 
 
 def _add_blockquote(
@@ -492,12 +614,57 @@ def _add_blockquote(
     inline_tokens: list[list[Token]],
     options: DocxBuildOptions,
 ) -> None:
-    for inline in inline_tokens:
+    callout_type = None
+    if inline_tokens and inline_tokens[0]:
+        first_token = inline_tokens[0][0]
+        if first_token.type == "text":
+            match = re.match(
+                r"^\s*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*",
+                first_token.content,
+                re.IGNORECASE,
+            )
+            if match:
+                callout_type = match.group(1).upper()
+                first_token.content = first_token.content[match.end():]
+
+    cfg = CALLOUT_CONFIGS.get(callout_type) if callout_type else None
+
+    for idx, inline in enumerate(inline_tokens):
+        if cfg and idx == 0 and not any(t.content.strip() for t in inline if t.type == "text"):
+            # If the first line was only the [!NOTE] tag and is now empty, skip creating an empty line
+            continue
+
         paragraph = document.add_paragraph()
         if options.rtl:
             _set_paragraph_rtl(paragraph)
         paragraph.paragraph_format.left_indent = Inches(0.3)
         paragraph.paragraph_format.right_indent = Inches(0.3)
+
+        pPr = paragraph._p.get_or_add_pPr()
+        if cfg:
+            shd = pPr.makeelement(
+                qn("w:shd"),
+                {qn("w:val"): "clear", qn("w:color"): "auto", qn("w:fill"): cfg["bg"]},
+            )
+            pPr.append(shd)
+            pBdr = pPr.makeelement(qn("w:pBdr"), {})
+            border = pPr.makeelement(
+                qn("w:right" if options.rtl else "w:left"),
+                {qn("w:val"): "single", qn("w:sz"): "24", qn("w:space"): "8", qn("w:color"): cfg["hex"]},
+            )
+            pBdr.append(border)
+            pPr.append(pBdr)
+
+            if idx == 0:
+                _add_styled_run(
+                    paragraph,
+                    cfg["title"] + (" " if any(t.content.strip() for t in inline if t.type == "text") else ""),
+                    font_name=options.font_family,
+                    font_size_pt=options.font_size_pt,
+                    bold=True,
+                    color=cfg["color"],
+                    rtl=options.rtl,
+                )
 
         _render_inline_tokens(
             paragraph,
@@ -505,10 +672,11 @@ def _add_blockquote(
             options,
             base_size=options.font_size_pt,
         )
-        # Color italic gray for blockquote feel
-        for run in paragraph.runs:
-            run.italic = True
-            run.font.color.rgb = RGBColor(0x4B, 0x55, 0x63)
+
+        if not cfg:
+            for run in paragraph.runs:
+                run.italic = True
+                run.font.color.rgb = RGBColor(0x4B, 0x55, 0x63)
 
 
 def _add_list_item(
@@ -739,7 +907,7 @@ def build_docx(
     document = Document()
     _set_document_default_rtl(document, options.font_family, options.font_size_pt)
 
-    # Set page margins
+    # Set page margins and footer page numbers
     for section in document.sections:
         section.left_margin = Inches(0.75)
         section.right_margin = Inches(0.75)
@@ -758,6 +926,32 @@ def build_docx(
                 docGrid = sectPr.makeelement(qn("w:docGrid"), {})
                 sectPr.append(docGrid)
             docGrid.set(qn("w:charSpace"), "0")
+
+        # Dynamic Persian footer page numbering: "صفحه X از Y"
+        footer = section.footer
+        if footer.paragraphs:
+            f_p = footer.paragraphs[0]
+            f_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            if options.rtl:
+                _set_paragraph_rtl(f_p)
+            r_page = f_p.add_run("صفحه ")
+            _set_run_font(r_page, options.font_family)
+            r_page.font.size = Pt(9)
+            r_page.font.color.rgb = RGBColor(0x6B, 0x72, 0x80)
+
+            from docx.oxml import parse_xml
+
+            f_p.add_run()._r.append(
+                parse_xml(r'<w:fldSimple xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" w:instr="PAGE"/>')
+            )
+            r_of = f_p.add_run(" از ")
+            _set_run_font(r_of, options.font_family)
+            r_of.font.size = Pt(9)
+            r_of.font.color.rgb = RGBColor(0x6B, 0x72, 0x80)
+
+            f_p.add_run()._r.append(
+                parse_xml(r'<w:fldSimple xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" w:instr="NUMPAGES"/>')
+            )
 
     # Walk tokens
     i = 0
@@ -806,7 +1000,8 @@ def build_docx(
                 else:
                     _add_mermaid_placeholder_text(document, mermaid_code, options)
             else:
-                _add_code_block(document, token.content, options)
+                lang = (token.info or "").strip().split()[0] if (token.info or "").strip() else ""
+                _add_code_block(document, token.content, options, lang=lang)
             i += 1
             continue
 
@@ -840,8 +1035,8 @@ def build_docx(
                     depth += 1
                 elif tokens[j].type == "blockquote_close":
                     depth -= 1
-                    if depth == 0:
-                        break
+                if depth == 0:
+                    break
                 elif tokens[j].type == "inline":
                     inlines.append(tokens[j].children or [])
                 j += 1
@@ -859,6 +1054,9 @@ def build_docx(
             continue
 
         if kind == "html_block":
+            raw_html = token.content.lower()
+            if "pagebreak" in raw_html or "page-break" in raw_html:
+                document.add_page_break()
             i += 1
             continue
 

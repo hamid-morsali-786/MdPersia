@@ -19,11 +19,12 @@ if (-not (& .\.venv\Scripts\pip.exe show pyinstaller 2>$null)) {
 
 # Build CLI exe
 Write-Host "`n--- Building fa-md-pdf.exe (CLI) ---" -ForegroundColor Green
-& .\.venv\Scripts\pyinstaller.exe fa-md-pdf.spec --noconfirm 2>&1 | Select-String "INFO: Build complete"
-
-# Build GUI exe
+$prevEA = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
+& .\.venv\Scripts\pyinstaller.exe fa-md-pdf.spec --noconfirm
 Write-Host "`n--- Building fa-md-pdf-gui.exe (GUI) ---" -ForegroundColor Green
-& .\.venv\Scripts\pyinstaller.exe fa-md-pdf-gui.spec --noconfirm 2>&1 | Select-String "INFO: Build complete"
+& .\.venv\Scripts\pyinstaller.exe fa-md-pdf-gui.spec --noconfirm
+$ErrorActionPreference = $prevEA
 
 # Show results
 Write-Host "`n=== Build Results ===" -ForegroundColor Cyan

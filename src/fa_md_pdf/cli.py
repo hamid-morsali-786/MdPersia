@@ -220,6 +220,12 @@ def build_parser() -> argparse.ArgumentParser:
             "Default: '.rtl' (so file.md -> file.rtl.md). Use empty string to overwrite."
         ),
     )
+    parser.add_argument(
+        "-w",
+        "--watch",
+        action="store_true",
+        help="Watch input files or directory for changes and re-convert automatically.",
+    )
 
     return parser
 
@@ -454,6 +460,40 @@ def main(argv: list[str] | None = None) -> int:
             print(f"    {result.error}", file=sys.stderr)
 
         print(f"Done: {len(successes)} succeeded, {len(failures)} failed.")
+
+        if args.watch:
+            print(f"\n[fa-md-pdf] Watching for changes in {input_path} (Press Ctrl+C to stop)...")
+            import time
+
+            def get_mtimes() -> dict[Path, float]:
+                mtimes = {}
+                for job in jobs:
+                    if job.source.is_file():
+                        try:
+                            mtimes[job.source] = job.source.stat().st_mtime
+                        except OSError:
+                            pass
+                return mtimes
+
+            last_mtimes = get_mtimes()
+            try:
+                while True:
+                    time.sleep(1.0)
+                    current_mtimes = get_mtimes()
+                    changed = [
+                        src for src, mtime in current_mtimes.items()
+                        if src not in last_mtimes or mtime > last_mtimes[src]
+                    ]
+                    if changed:
+                        print(f"\n[fa-md-pdf] Detected changes in {len(changed)} file(s). Re-converting...")
+                        changed_jobs = [j for j in jobs if j.source in set(changed)]
+                        convert_jobs(changed_jobs, options=options, fail_fast=False)
+                        for cj in changed_jobs:
+                            print(f"OK  {cj.source} -> {cj.output}")
+                        last_mtimes = current_mtimes
+            except KeyboardInterrupt:
+                print("\n[fa-md-pdf] Stopped watching.")
+                return 0
 
         return 1 if failures else 0
 

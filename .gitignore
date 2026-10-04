@@ -11,5 +11,4 @@ build/
 .env
 .DS_Store
 browsers/
-tests/
 browsers

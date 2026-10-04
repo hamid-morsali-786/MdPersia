@@ -39,12 +39,12 @@ VAZIRMATN_WEIGHTS: Final[dict[str, int]] = {
 @dataclass(frozen=True)
 class HtmlBuildOptions:
     source_path: Path
-    font_family: str
-    font_file: Path | None
-    font_dir: Path | None
-    custom_css: Path | None
-    mermaid_source: str
-    mermaid_theme: str
+    font_family: str = "Vazirmatn"
+    font_file: Path | None = None
+    font_dir: Path | None = None
+    custom_css: Path | None = None
+    mermaid_source: str = DEFAULT_MERMAID_CDN
+    mermaid_theme: str = "default"
     include_default_css: bool = True
 
 
@@ -90,8 +90,27 @@ def extract_title(markdown_text: str, fallback: str) -> str:
     return cleaned or fallback
 
 
+def _highlight_code(code: str, lang: str, attrs: str) -> str:
+    clean_lang = (lang or "").strip().lower().split()[0] if (lang or "").strip() else ""
+    if not clean_lang:
+        return ""
+    try:
+        from pygments import highlight
+        from pygments.formatters import HtmlFormatter
+        from pygments.lexers import get_lexer_by_name
+
+        lexer = get_lexer_by_name(clean_lang, stripall=False)
+        formatter = HtmlFormatter(nowrap=True)
+        return highlight(code, lexer, formatter)
+    except Exception:
+        return ""
+
+
 def build_markdown_renderer() -> MarkdownIt:
-    renderer = MarkdownIt("default", {"html": True, "breaks": True, "typographer": True})
+    renderer = MarkdownIt(
+        "default",
+        {"html": True, "breaks": True, "typographer": True, "highlight": _highlight_code},
+    )
     # These rules are commonly used in documentation Markdown.
     renderer.enable("table")
     renderer.enable("strikethrough")
@@ -242,6 +261,45 @@ window.__FA_MD_PDF_MERMAID_ERROR = null;
 """
 
 
+CALLOUT_TITLES: Final[dict[str, tuple[str, str]]] = {
+    "NOTE": ("callout-note", "💡 نکته"),
+    "TIP": ("callout-tip", "💡 راهنما"),
+    "IMPORTANT": ("callout-important", "📌 مهم"),
+    "WARNING": ("callout-warning", "⚠️ هشدار"),
+    "CAUTION": ("callout-caution", "🛑 احتیاط"),
+}
+
+CALLOUT_RE: Final[re.Pattern[str]] = re.compile(
+    r"<blockquote>\s*<p>\s*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\](?:\s*<br\s*/?>|\s*\n)?\s*(.*?)(?=</blockquote>)",
+    re.IGNORECASE | re.DOTALL,
+)
+
+PAGEBREAK_RE: Final[re.Pattern[str]] = re.compile(
+    r"<!--\s*page-?break\s*-->|\\pagebreak",
+    re.IGNORECASE,
+)
+
+
+def _transform_callouts(html_str: str) -> str:
+    def repl(m: re.Match[str]) -> str:
+        callout_type = m.group(1).upper()
+        content = m.group(2)
+        cls_name, title_fa = CALLOUT_TITLES.get(
+            callout_type, (f"callout-{callout_type.lower()}", callout_type)
+        )
+        return (
+            f'<blockquote class="callout {cls_name}">\n'
+            f'<div class="callout-title">{title_fa}</div>\n'
+            f'<p>{content}'
+        )
+
+    return CALLOUT_RE.sub(repl, html_str)
+
+
+def _transform_pagebreaks(html_str: str) -> str:
+    return PAGEBREAK_RE.sub(r'<div class="page-break"></div>', html_str)
+
+
 def build_html(markdown_text: str, options: HtmlBuildOptions) -> HtmlDocument:
     markdown_text = strip_front_matter(markdown_text)
     title = extract_title(markdown_text, options.source_path.stem)
@@ -249,6 +307,8 @@ def build_html(markdown_text: str, options: HtmlBuildOptions) -> HtmlDocument:
     markdown_with_mermaid, has_mermaid = convert_mermaid_fences_to_html(markdown_text)
     renderer = build_markdown_renderer()
     body_html = renderer.render(markdown_with_mermaid)
+    body_html = _transform_callouts(body_html)
+    body_html = _transform_pagebreaks(body_html)
 
     css = build_css(options)
     base_uri = directory_uri(options.source_path.parent)

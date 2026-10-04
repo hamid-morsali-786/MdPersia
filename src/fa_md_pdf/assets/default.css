@@ -178,3 +178,57 @@ hr {
     color: inherit;
   }
 }
+
+/* Page Break */
+.page-break, hr.page-break {
+  page-break-after: always;
+  break-after: page;
+}
+
+/* Callout / Admonitions */
+blockquote.callout {
+  border-right-width: 4px;
+  border-radius: 6px;
+  padding: 0.8em 1.2em;
+  margin: 1.2em 0;
+  color: #1f2937;
+}
+.callout-title {
+  font-weight: 700;
+  margin-bottom: 0.4em;
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+}
+blockquote.callout-note {
+  border-right-color: #2563eb;
+  background: #eff6ff;
+}
+blockquote.callout-tip {
+  border-right-color: #16a34a;
+  background: #f0fdf4;
+}
+blockquote.callout-important {
+  border-right-color: #7c3aed;
+  background: #f5f3ff;
+}
+blockquote.callout-warning {
+  border-right-color: #d97706;
+  background: #fffbeb;
+}
+blockquote.callout-caution {
+  border-right-color: #dc2626;
+  background: #fef2f2;
+}
+
+/* Pygments Syntax Highlighting */
+pre code .k, pre code .kd, pre code .kn, pre code .kr { color: #007020; font-weight: bold; } /* Keywords */
+pre code .kt { color: #902000; font-weight: bold; } /* Type */
+pre code .s, pre code .s1, pre code .s2, pre code .sb, pre code .sc, pre code .sd { color: #ba2121; } /* Strings */
+pre code .c, pre code .c1, pre code .cm, pre code .cs, pre code .ch { color: #60a0b0; font-style: italic; } /* Comments */
+pre code .m, pre code .mi, pre code .mf, pre code .mh, pre code .mo { color: #208050; } /* Numbers */
+pre code .nf, pre code .fm { color: #06287e; font-weight: bold; } /* Functions */
+pre code .nc, pre code .nn { color: #0e84b5; font-weight: bold; } /* Classes / Namespaces */
+pre code .o, pre code .ow { color: #555555; } /* Operators */
+pre code .nb, pre code .bp { color: #007020; } /* Builtins */
+pre code .na, pre code .nv, pre code .vi, pre code .vg { color: #19177c; } /* Attributes / Variables */

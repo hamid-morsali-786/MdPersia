@@ -196,6 +196,11 @@ def _render_job(page, job: ConvertJob, options: ConvertOptions, temp_dir: Path) 
         landscape=options.landscape,
         print_background=True,
         prefer_css_page_size=True,
+        display_header_footer=True,
+        header_template='<div style="font-size: 8pt; width: 100%; text-align: left; padding-left: 15mm; color: #9ca3af; font-family: Vazirmatn, Tahoma, sans-serif;"></div>',
+        footer_template='<div style="font-size: 8pt; width: 100%; text-align: center; color: #6b7280; font-family: Vazirmatn, Tahoma, sans-serif; direction: rtl;">'
+                        'صفحه <span class="pageNumber"></span> از <span class="totalPages"></span>'
+                        '</div>',
         margin={
             "top": options.margin,
             "right": options.margin,
