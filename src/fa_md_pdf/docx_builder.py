@@ -1,9 +1,8 @@
-"""Convert Markdown to DOCX with Persian/RTL support and Mermaid diagram embedding."""
-
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass, replace
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -407,6 +406,209 @@ def _add_hyperlink_run(
         )
 
 
+HTML_IMG_RE = re.compile(r"""<img\b(?P<attrs>[^>]*)>""", re.IGNORECASE)
+ATTR_SRC_RE = re.compile(r"""src\s*=\s*['"]([^'"]+)['"]""", re.IGNORECASE)
+ATTR_ALT_RE = re.compile(r"""alt\s*=\s*['"]([^'"]*)['"]""", re.IGNORECASE)
+
+
+def _calculate_image_width(img_px_width: int, options: DocxBuildOptions) -> float:
+    """Calculate target width in inches constrained by page format and margins."""
+    css_width = img_px_width / 96.0
+    fmt_key = (options.page_format or "A4").strip().upper()
+    w_mm, h_mm = PAGE_FORMAT_DIMENSIONS.get(fmt_key, (210.0, 297.0))
+    page_w_in = (h_mm if options.landscape else w_mm) / 25.4
+    margin_in = parse_docx_length(options.margin).inches
+    available_w = max(1.0, page_w_in - (2 * margin_in))
+    max_w = min(options.image_max_width_inches, available_w) if options.image_max_width_inches != 6.5 else available_w
+    target_w = min(css_width, max_w)
+    return min(css_width, available_w) if target_w < 1.0 else target_w
+
+
+def _resolve_image_file(src: str, source_path: Path) -> Path | None:
+    """Resolve relative or absolute local image file path."""
+    if not src or src.startswith(("http://", "https://", "data:")):
+        return None
+    candidate = (source_path.parent / src).resolve()
+    if candidate.is_file():
+        return candidate
+    alt_cand = Path(src).resolve()
+    if alt_cand.is_file():
+        return alt_cand
+    if candidate.suffix.lower() == ".svg" and candidate.with_suffix(".png").is_file():
+        return candidate.with_suffix(".png")
+    return None
+
+
+def _embed_image_picture(paragraph: "Paragraph", image_path: Path, options: DocxBuildOptions) -> bool:
+    """Embed local picture file into paragraph run."""
+    try:
+        from docx.image.image import Image as DocxImage
+
+        img = DocxImage.from_file(str(image_path))
+        target_w = _calculate_image_width(img.px_width, options)
+        run = paragraph.add_run()
+        run.add_picture(str(image_path), width=Inches(target_w))
+        return True
+    except Exception:
+        return False
+
+
+def _add_image_to_paragraph(
+    paragraph: "Paragraph",
+    src: str,
+    alt: str,
+    options: DocxBuildOptions,
+) -> bool:
+    """Resolve and embed image into paragraph or add fallback text."""
+    resolved = _resolve_image_file(src, options.source_path)
+    if resolved and _embed_image_picture(paragraph, resolved, options):
+        return True
+    _add_styled_run(
+        paragraph,
+        f"[تصویر: {alt or src}]",
+        font_name=options.font_family,
+        font_size_pt=options.font_size_pt,
+        italic=True,
+        color=RGBColor(0x6B, 0x72, 0x80),
+        rtl=options.rtl,
+    )
+    return False
+
+
+def _add_standalone_image(
+    document: "DocxDocument",
+    src: str,
+    alt: str,
+    options: DocxBuildOptions,
+) -> "Paragraph":
+    """Add a standalone centered paragraph containing the image."""
+    paragraph = document.add_paragraph()
+    paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    _add_image_to_paragraph(paragraph, src, alt, options)
+    return paragraph
+
+
+def _handle_html_inline_image(
+    paragraph: "Paragraph",
+    raw_html: str,
+    options: DocxBuildOptions,
+) -> None:
+    match = HTML_IMG_RE.search(raw_html)
+    if not match:
+        return
+    attrs = match.group("attrs")
+    src_m = ATTR_SRC_RE.search(attrs)
+    alt_m = ATTR_ALT_RE.search(attrs)
+    src = src_m.group(1) if src_m else ""
+    alt = alt_m.group(1) if alt_m else ""
+    if src:
+        _add_image_to_paragraph(paragraph, src, alt, options)
+
+
+class HtmlBlockImageParser(HTMLParser):
+    """Parse HTML blocks extracting image tags and caption containers."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.images: list[tuple[str, str]] = []
+        self.caption_runs: list[tuple[str, str, str | None]] = []
+        self._in_caption = False
+        self._current_href: str | None = None
+        self._ignore = False
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        attr_dict = {k.lower(): v or "" for k, v in attrs}
+        t = tag.lower()
+        if t in ("style", "script"):
+            self._ignore = True
+        elif t == "img":
+            self.images.append((attr_dict.get("src", ""), attr_dict.get("alt", "")))
+        elif t in ("figcaption",) or "caption" in attr_dict.get("class", "").lower():
+            self._in_caption = True
+        elif t == "a":
+            self._current_href = attr_dict.get("href")
+        elif t == "br" and self._in_caption:
+            self.caption_runs.append(("break", "", None))
+
+    def handle_endtag(self, tag: str) -> None:
+        t = tag.lower()
+        if t in ("style", "script"):
+            self._ignore = False
+        elif t in ("figcaption", "div"):
+            self._in_caption = False
+        elif t == "a":
+            self._current_href = None
+
+    def handle_data(self, data: str) -> None:
+        if self._ignore or not self._in_caption or not data:
+            return
+        if self._current_href:
+            self.caption_runs.append(("link", data, self._current_href))
+        else:
+            self.caption_runs.append(("text", data, None))
+
+
+def _append_caption_runs(
+    paragraph: "Paragraph",
+    caption_runs: list[tuple[str, str, str | None]],
+    options: DocxBuildOptions,
+) -> None:
+    c_size = max(8, options.font_size_pt - 2)
+    c_color = RGBColor(0x4B, 0x55, 0x63)
+    at_line_start = True
+    for kind, text, href in caption_runs:
+        clean = re.sub(r"[ \t\r\n]+", " ", text)
+        if kind == "break":
+            paragraph.add_run().add_break()
+            at_line_start = True
+        elif kind == "link" and href and clean.strip():
+            _add_hyperlink_run(paragraph, clean.strip(), href, font_name=options.font_family, font_size_pt=c_size, rtl=options.rtl)
+            at_line_start = False
+        elif kind == "text" and clean.strip():
+            val = clean.lstrip() if at_line_start else clean
+            _add_styled_run(paragraph, val, font_name=options.font_family, font_size_pt=c_size, color=c_color, rtl=options.rtl)
+            at_line_start = False
+
+
+def _render_caption_paragraph(
+    document: "DocxDocument",
+    caption_runs: list[tuple[str, str, str | None]],
+    options: DocxBuildOptions,
+) -> None:
+    p = document.add_paragraph()
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    if options.rtl:
+        _set_paragraph_rtl(p)
+    p.paragraph_format.space_before = Pt(4)
+    p.paragraph_format.space_after = Pt(12)
+    _append_caption_runs(p, caption_runs, options)
+
+
+def _render_html_images_block(
+    document: "DocxDocument",
+    raw_html: str,
+    options: DocxBuildOptions,
+) -> None:
+    parser = HtmlBlockImageParser()
+    parser.feed(raw_html)
+    for src, alt in parser.images:
+        _add_standalone_image(document, src, alt, options)
+    if parser.caption_runs:
+        _render_caption_paragraph(document, parser.caption_runs, options)
+
+
+def _handle_html_block(
+    document: "DocxDocument",
+    raw_html: str,
+    options: DocxBuildOptions,
+) -> None:
+    raw_lower = raw_html.lower()
+    if "pagebreak" in raw_lower or "page-break" in raw_lower:
+        document.add_page_break()
+    if "<img" in raw_lower:
+        _render_html_images_block(document, raw_html, options)
+
+
 def _render_inline_tokens(
     paragraph: "Paragraph",
     tokens: list[Token],
@@ -431,6 +633,8 @@ def _render_inline_tokens(
                 ltr_stack.append(False)
             elif "</span" in content_lower and len(ltr_stack) > 1:
                 ltr_stack.pop()
+            elif "<img" in content_lower:
+                _handle_html_inline_image(paragraph, token.content, options)
             continue
 
         if kind == "text":
@@ -506,45 +710,7 @@ def _render_inline_tokens(
         elif kind == "image":
             alt = token.content or token.attrGet("alt") or ""
             src = token.attrGet("src") or ""
-            embedded = False
-
-            if src and not src.startswith(("http://", "https://", "data:")):
-                candidate = (options.source_path.parent / src).resolve()
-                if not candidate.is_file():
-                    candidate = Path(src).resolve()
-
-                if candidate.is_file():
-                    try:
-                        from docx.image.image import Image as DocxImage
-
-                        img = DocxImage.from_file(str(candidate))
-                        css_width = img.px_width / 96.0
-                        fmt_key = (options.page_format or "A4").strip().upper()
-                        w_mm, h_mm = PAGE_FORMAT_DIMENSIONS.get(fmt_key, (210.0, 297.0))
-                        page_w_in = (h_mm if options.landscape else w_mm) / 25.4
-                        margin_in = parse_docx_length(options.margin).inches
-                        available_w = max(1.0, page_w_in - (2 * margin_in))
-                        max_w = min(options.image_max_width_inches, available_w) if options.image_max_width_inches != 6.5 else available_w
-                        target_w = min(css_width, max_w)
-                        if target_w < 1.0:
-                            target_w = min(css_width, available_w)
-
-                        run = paragraph.add_run()
-                        run.add_picture(str(candidate), width=Inches(target_w))
-                        embedded = True
-                    except Exception:
-                        embedded = False
-
-            if not embedded:
-                _add_styled_run(
-                    paragraph,
-                    f"[تصویر: {alt or src}]",
-                    font_name=options.font_family,
-                    font_size_pt=base_size,
-                    italic=True,
-                    color=RGBColor(0x6B, 0x72, 0x80),
-                    rtl=options.rtl,
-                )
+            _add_image_to_paragraph(paragraph, src, alt, options)
 
         elif kind == "s_open":
             # strikethrough not commonly used; ignore for now
@@ -618,13 +784,17 @@ def _add_paragraph_block(
     children = inline_token.children or []
     visible_children = [
         t for t in children
-        if t.type != "html_inline" and not (t.type == "text" and not t.content.strip())
+        if (t.type != "html_inline" or "<img" in t.content.lower())
+        and not (t.type == "text" and not t.content.strip())
     ]
     if not visible_children:
         return
 
     paragraph = document.add_paragraph()
-    has_image = any(t.type == "image" for t in children)
+    has_image = any(
+        t.type == "image" or (t.type == "html_inline" and "<img" in t.content.lower())
+        for t in children
+    )
     if has_image:
         paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
     elif options.rtl:
@@ -1197,9 +1367,7 @@ def build_docx(
             continue
 
         if kind == "html_block":
-            raw_html = token.content.lower()
-            if "pagebreak" in raw_html or "page-break" in raw_html:
-                document.add_page_break()
+            _handle_html_block(document, token.content, options)
             i += 1
             continue
 

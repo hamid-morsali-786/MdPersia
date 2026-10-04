@@ -166,3 +166,51 @@ def test_docx_strip_emojis_option(tmp_path: Path) -> None:
     assert "پرسرعت" in full_text
     assert "تایید شده" in full_text
     assert "نکته:" in full_text
+
+
+def test_docx_embeds_html_block_image_and_caption(tmp_path: Path) -> None:
+    import base64
+
+    # Create dummy 1x1 png
+    b64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+    png_bytes = base64.b64decode(b64)
+    img_file = tmp_path / "diagram.png"
+    img_file.write_bytes(png_bytes)
+
+    md_content = f"""# گزارش
+
+<div class="diagram-container">
+  <img src="{img_file.name}" alt="نمودار آزمایشی" />
+  <div class="diagram-caption">
+    دیاگرام شماره ۱: تست کپشن
+    <br/>
+    <a href="https://example.com">مشاهده تعاملی</a>
+  </div>
+</div>
+
+متن دارای تصویر درون‌خطی <img src="{img_file.name}" alt="آیکون" /> است.
+"""
+    input_file = tmp_path / "doc.md"
+    input_file.write_text(md_content, encoding="utf-8")
+    output_file = tmp_path / "doc.docx"
+
+    options = DocxBuildOptions(source_path=input_file)
+    build_docx(md_content, options, output_file)
+
+    assert output_file.is_file()
+    doc = docx.Document(output_file)
+
+    # 1. Total drawings should be 2 (one block, one inline)
+    drawings = []
+    for p in doc.paragraphs:
+        drawings.extend(p._p.xpath('.//w:drawing'))
+    assert len(drawings) == 2
+
+    # 2. Caption paragraph should be present
+    caption_p = [p for p in doc.paragraphs if "دیاگرام شماره ۱" in p.text]
+    assert len(caption_p) == 1
+    assert "تست کپشن" in caption_p[0].text
+
+    # 3. Hyperlink in caption should exist
+    hyperlinks = caption_p[0]._p.xpath('.//w:hyperlink')
+    assert len(hyperlinks) >= 1
