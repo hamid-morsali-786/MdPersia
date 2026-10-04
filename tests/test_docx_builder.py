@@ -65,3 +65,35 @@ def test_docx_embeds_local_image(tmp_path: Path) -> None:
     for p in doc.paragraphs:
         drawings.extend(p._p.xpath('.//w:drawing'))
     assert len(drawings) == 1
+
+
+def test_docx_custom_margins_and_page_format(tmp_path: Path) -> None:
+    from docx.enum.section import WD_ORIENT
+
+    md_content = "# تست حاشیه\nمتن نمونه"
+    input_file = tmp_path / "margin_test.md"
+    input_file.write_text(md_content, encoding="utf-8")
+    output_file = tmp_path / "margin_test.docx"
+
+    options = DocxBuildOptions(
+        source_path=input_file,
+        margin="5mm",
+        page_format="A4",
+        landscape=True,
+    )
+    build_docx(md_content, options, output_file)
+
+    assert output_file.is_file()
+    doc = docx.Document(output_file)
+    section = doc.sections[0]
+
+    # Verify 5mm margins (approx 4.99mm due to twips conversion)
+    assert abs(section.left_margin.mm - 5.0) < 0.1
+    assert abs(section.right_margin.mm - 5.0) < 0.1
+    assert abs(section.top_margin.mm - 5.0) < 0.1
+    assert abs(section.bottom_margin.mm - 5.0) < 0.1
+
+    # Verify landscape A4 (297mm width, 210mm height)
+    assert section.orientation == WD_ORIENT.LANDSCAPE
+    assert abs(section.page_width.mm - 297.0) < 0.5
+    assert abs(section.page_height.mm - 210.0) < 0.5

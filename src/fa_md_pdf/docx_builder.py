@@ -8,10 +8,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from docx import Document
+from docx.enum.section import WD_ORIENT
 from docx.enum.table import WD_ALIGN_VERTICAL
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import qn
-from docx.shared import Inches, Pt, RGBColor
+from docx.shared import Cm, Inches, Mm, Pt, RGBColor
 from markdown_it import MarkdownIt
 from markdown_it.token import Token
 
@@ -25,6 +26,7 @@ from .html_builder import (
 
 if TYPE_CHECKING:
     from docx.document import Document as DocxDocument
+    from docx.shared import Length
     from docx.text.paragraph import Paragraph
 
 
@@ -33,6 +35,36 @@ DEFAULT_DOCX_FONT_FALLBACK = "Tahoma"
 DEFAULT_DOCX_CODE_FONT = "Consolas"
 
 HEADING_SIZES = {1: 22, 2: 18, 3: 15, 4: 13, 5: 12, 6: 11}
+
+PAGE_FORMAT_DIMENSIONS: dict[str, tuple[float, float]] = {
+    "A4": (210.0, 297.0),
+    "LETTER": (215.9, 279.4),
+    "LEGAL": (215.9, 355.6),
+}
+
+
+def parse_docx_length(margin_str: str) -> Length:
+    """Parse length string (e.g. '5mm', '15mm', '0.5in', '1.5cm', '20px') into docx Length."""
+    s = (margin_str or "").strip().lower()
+    m = re.match(r"^([\d.]+)\s*(mm|cm|in|inch|pt|px)?$", s)
+    if not m:
+        return Mm(15.0)
+    try:
+        val = float(m.group(1))
+    except ValueError:
+        return Mm(15.0)
+    unit = m.group(2) or "mm"
+    if unit == "mm":
+        return Mm(val)
+    if unit == "cm":
+        return Cm(val)
+    if unit in ("in", "inch"):
+        return Inches(val)
+    if unit == "pt":
+        return Pt(val)
+    if unit == "px":
+        return Inches(val / 96.0)
+    return Mm(val)
 
 
 @dataclass(frozen=True)
@@ -47,6 +79,9 @@ class DocxBuildOptions:
     image_max_width_inches: float = 6.5   # maximum image width in document
     include_page_numbers: bool = True
     highlight_code: bool = True
+    page_format: str = "A4"
+    margin: str = "15mm"
+    landscape: bool = False
 
 
 @dataclass(frozen=True)
@@ -408,9 +443,15 @@ def _render_inline_tokens(
 
                         img = DocxImage.from_file(str(candidate))
                         css_width = img.px_width / 96.0
-                        target_w = min(css_width, options.image_max_width_inches)
+                        fmt_key = (options.page_format or "A4").strip().upper()
+                        w_mm, h_mm = PAGE_FORMAT_DIMENSIONS.get(fmt_key, (210.0, 297.0))
+                        page_w_in = (h_mm if options.landscape else w_mm) / 25.4
+                        margin_in = parse_docx_length(options.margin).inches
+                        available_w = max(1.0, page_w_in - (2 * margin_in))
+                        max_w = min(options.image_max_width_inches, available_w) if options.image_max_width_inches != 6.5 else available_w
+                        target_w = min(css_width, max_w)
                         if target_w < 1.0:
-                            target_w = css_width
+                            target_w = min(css_width, available_w)
 
                         run = paragraph.add_run()
                         run.add_picture(str(candidate), width=Inches(target_w))
@@ -755,9 +796,15 @@ def _add_mermaid_image(
         # PNGs are rendered at options.image_scale * 96 DPI.
         # Compute natural CSS width and clamp between min and max.
         css_width_inches = img_width / (float(options.image_scale) * 96.0)
+        fmt_key = (options.page_format or "A4").strip().upper()
+        w_mm, h_mm = PAGE_FORMAT_DIMENSIONS.get(fmt_key, (210.0, 297.0))
+        page_w_in = (h_mm if options.landscape else w_mm) / 25.4
+        margin_in = parse_docx_length(options.margin).inches
+        available_w = max(1.0, page_w_in - (2 * margin_in))
+        max_limit = min(options.image_max_width_inches, available_w) if options.image_max_width_inches != 6.5 else available_w
         target_width = min(
             max(css_width_inches, options.image_min_width_inches),
-            options.image_max_width_inches,
+            max_limit,
         )
 
         run.add_picture(str(image_path), width=Inches(target_width))
@@ -909,12 +956,25 @@ def build_docx(
     document = Document()
     _set_document_default_rtl(document, options.font_family, options.font_size_pt)
 
-    # Set page margins and footer page numbers
+    # Set page dimensions, orientation, margins, and footer page numbers
+    fmt_key = (options.page_format or "A4").strip().upper()
+    w_mm, h_mm = PAGE_FORMAT_DIMENSIONS.get(fmt_key, (210.0, 297.0))
+    margin_len = parse_docx_length(options.margin)
+
     for section in document.sections:
-        section.left_margin = Inches(0.75)
-        section.right_margin = Inches(0.75)
-        section.top_margin = Inches(0.75)
-        section.bottom_margin = Inches(0.75)
+        if options.landscape:
+            section.page_width = Mm(h_mm)
+            section.page_height = Mm(w_mm)
+            section.orientation = WD_ORIENT.LANDSCAPE
+        else:
+            section.page_width = Mm(w_mm)
+            section.page_height = Mm(h_mm)
+            section.orientation = WD_ORIENT.PORTRAIT
+
+        section.left_margin = margin_len
+        section.right_margin = margin_len
+        section.top_margin = margin_len
+        section.bottom_margin = margin_len
         # RTL section - set bidi on section properties
         if options.rtl:
             sectPr = section._sectPr

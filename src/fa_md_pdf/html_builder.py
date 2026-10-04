@@ -46,6 +46,9 @@ class HtmlBuildOptions:
     mermaid_source: str = DEFAULT_MERMAID_CDN
     mermaid_theme: str = "default"
     include_default_css: bool = True
+    page_format: str = "A4"
+    margin: str = "15mm"
+    landscape: bool = False
 
 
 @dataclass(frozen=True)
@@ -208,6 +211,11 @@ body {{
 
 def build_css(options: HtmlBuildOptions) -> str:
     css_parts: list[str] = []
+    # Dynamic @page rule matching user margin and page format
+    orient = " landscape" if options.landscape else " portrait"
+    page_css = f"@page {{\n  size: {options.page_format}{orient};\n  margin: {options.margin};\n}}"
+    css_parts.append(page_css)
+
     if options.include_default_css:
         css_parts.append(load_default_css())
 

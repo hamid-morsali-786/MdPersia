@@ -164,6 +164,9 @@ def _render_job(page, job: ConvertJob, options: ConvertOptions, temp_dir: Path) 
             custom_css=options.custom_css,
             mermaid_source=options.mermaid_source,
             mermaid_theme=options.mermaid_theme,
+            page_format=options.page_format,
+            margin=options.margin,
+            landscape=options.landscape,
         ),
     )
 
@@ -197,9 +200,9 @@ def _render_job(page, job: ConvertJob, options: ConvertOptions, temp_dir: Path) 
         format=options.page_format,
         landscape=options.landscape,
         print_background=True,
-        prefer_css_page_size=True,
+        prefer_css_page_size=False,
         display_header_footer=options.include_page_numbers,
-        header_template='<div style="font-size: 8pt; width: 100%; text-align: left; padding-left: 15mm; color: #9ca3af; font-family: Vazirmatn, Tahoma, sans-serif;"></div>',
+        header_template="<div></div>",
         footer_template='<div style="font-size: 8pt; width: 100%; text-align: center; color: #6b7280; font-family: Vazirmatn, Tahoma, sans-serif; direction: rtl;">'
                         'صفحه <span class="pageNumber"></span> از <span class="totalPages"></span>'
                         '</div>',
@@ -256,6 +259,9 @@ def _render_job_docx(job: ConvertJob, options: ConvertOptions) -> None:
             image_max_width_inches=options.docx_image_max_width,
             include_page_numbers=options.include_page_numbers,
             highlight_code=options.highlight_code,
+            page_format=options.page_format,
+            margin=options.margin,
+            landscape=options.landscape,
         ),
         job.output,
     )
