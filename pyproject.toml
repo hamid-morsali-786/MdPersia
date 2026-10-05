@@ -50,6 +50,7 @@ fa_md_pdf = ["assets/*.css"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["src"]
 addopts = "-q"
 
 [tool.ruff]
