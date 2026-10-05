@@ -40,3 +40,29 @@ def test_main_window_watch_mode_cancel(tk_root, tmp_path):
     app._cancel_conversion()
     assert app.is_watching is False
     assert app.watch_var.get() is False
+
+
+def test_main_window_modern_panels(tk_root, tmp_path):
+    app = MainWindow(tk_root, tmp_path)
+    assert hasattr(app, "queue_panel")
+    assert hasattr(app, "inspector_panel")
+    assert hasattr(app, "workspace_panel")
+    assert hasattr(app, "status_bar")
+    assert hasattr(app, "theme_manager")
+
+    # Add a file to queue
+    f = tmp_path / "sample.md"
+    f.write_text("# Hello World", encoding="utf-8")
+    app.queue_panel.add_files([f])
+    assert len(app.queue_panel.get_files()) == 1
+
+    # Check preview selection
+    app.queue_panel.on_file_selected(f)
+    assert "Hello World" in app.workspace_panel.get_preview_text()
+
+
+def test_main_window_theme_toggle(tk_root, tmp_path):
+    app = MainWindow(tk_root, tmp_path)
+    dark_before = app.theme_manager.is_dark
+    app._toggle_theme()
+    assert app.theme_manager.is_dark != dark_before
