@@ -6,6 +6,7 @@ import datetime
 import tkinter as tk
 from pathlib import Path
 from tkinter import ttk
+from typing import Callable
 
 from .gui_theme import ThemeColors
 
@@ -13,8 +14,12 @@ from .gui_theme import ThemeColors
 class LivePreviewConsolePanel(ttk.Frame):
     """Dual tab workspace hosting Markdown live preview and streaming terminal."""
 
-    def __init__(self, parent: tk.Widget, **kwargs) -> None:
+    def __init__(
+        self, parent: tk.Widget, on_open_output_dir: Callable[[], None] | None = None, **kwargs
+    ) -> None:
         super().__init__(parent, **kwargs)
+        self.on_open_output_dir = on_open_output_dir
+        self._current_file: Path | None = None
         self.notebook = ttk.Notebook(self)
         self.notebook.pack(fill=tk.BOTH, expand=True)
         self._build_preview_tab()
@@ -29,6 +34,9 @@ class LivePreviewConsolePanel(ttk.Frame):
         meta_bar.pack(fill=tk.X, pady=(0, 4))
         self.preview_path_lbl = ttk.Label(meta_bar, text="سندی انتخاب نشده است", style="Title.TLabel")
         self.preview_path_lbl.pack(side=tk.LEFT)
+        ttk.Button(meta_bar, text="✏️ ادیتور", command=self._open_in_editor).pack(
+            side=tk.RIGHT, padx=4
+        )
         self.preview_info_lbl = ttk.Label(meta_bar, text="", style="Muted.TLabel")
         self.preview_info_lbl.pack(side=tk.RIGHT)
 
@@ -40,6 +48,17 @@ class LivePreviewConsolePanel(ttk.Frame):
         self.preview_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scroll.pack(side=tk.RIGHT, fill=tk.Y)
 
+    def _open_in_editor(self) -> None:
+        """Open current preview file in OS default editor."""
+        import os
+        import subprocess
+
+        if self._current_file and self._current_file.is_file():
+            try:
+                os.startfile(str(self._current_file))
+            except AttributeError:
+                subprocess.Popen(["notepad", str(self._current_file)])
+
     def _build_console_tab(self) -> None:
         """Create streaming console terminal tab."""
         tab = ttk.Frame(self.notebook, padding=4)
@@ -48,6 +67,10 @@ class LivePreviewConsolePanel(ttk.Frame):
         tool_bar = ttk.Frame(tab)
         tool_bar.pack(fill=tk.X, pady=(0, 4))
         ttk.Label(tool_bar, text="وقایع زنده تبدیل", style="Title.TLabel").pack(side=tk.LEFT)
+        if self.on_open_output_dir:
+            ttk.Button(tool_bar, text="📁 پوشه خروجی", command=self.on_open_output_dir).pack(
+                side=tk.RIGHT, padx=2
+            )
         ttk.Button(tool_bar, text="پاکسازی", command=self.clear_logs).pack(side=tk.RIGHT, padx=2)
 
         txt_frame = ttk.Frame(tab)
@@ -79,6 +102,7 @@ class LivePreviewConsolePanel(ttk.Frame):
 
     def set_preview_file(self, file_path: Path | None) -> None:
         """Display content and metadata of a file in previewer."""
+        self._current_file = file_path
         self.preview_text.configure(state="normal")
         self.preview_text.delete("1.0", tk.END)
         if not file_path or not file_path.is_file():
@@ -180,6 +204,11 @@ class StatusBarPanel(ttk.Frame):
         self.progress_var.set(0.0)
         self.status_var.set("آماده")
         self.badge_lbl.configure(text="Playwright Ready")
+
+    def update_system_status(self, offline_browsers: bool = False) -> None:
+        """Update system badges for offline resources."""
+        txt = "مرورگر آفلاین آماده" if offline_browsers else "پلی‌رایت سیستمی"
+        self.badge_lbl.configure(text=txt)
 
     def apply_colors(self, colors: ThemeColors) -> None:
         """Update label colors based on theme."""

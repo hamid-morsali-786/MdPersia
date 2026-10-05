@@ -21,6 +21,7 @@ class QueueItem:
     size_str: str
     status: str
     error: str | None = None
+    relative_path: Path | None = None
 
 
 def format_file_size(size_bytes: int) -> str:
@@ -52,6 +53,7 @@ class DocumentQueuePanel(ttk.Frame):
         self._items: dict[str, QueueItem] = {}
         self._build_header()
         self._build_treeview()
+        self._build_context_menu()
         self._build_toolbar()
 
     def _build_header(self) -> None:
@@ -93,6 +95,51 @@ class DocumentQueuePanel(ttk.Frame):
         self.tree.column("status", width=90, anchor=tk.CENTER)
         self.tree.column("path", width=200, anchor=tk.W)
 
+    def _build_context_menu(self) -> None:
+        """Build right-click context menu for queue items."""
+        self.context_menu = tk.Menu(self, tearoff=0)
+        self.context_menu.add_command(label="باز کردن فایل", command=self._open_selected_file)
+        self.context_menu.add_command(label="باز کردن پوشه فایل", command=self._open_selected_dir)
+        self.context_menu.add_separator()
+        self.context_menu.add_command(label="حذف از صف", command=self.remove_selected)
+        self.tree.bind("<Button-3>", self._show_context_menu)
+
+    def _show_context_menu(self, event: tk.Event) -> None:
+        """Show context menu on right click at cursor position."""
+        iid = self.tree.identify_row(event.y)
+        if iid:
+            if iid not in self.tree.selection():
+                self.tree.selection_set(iid)
+            self.context_menu.post(event.x_root, event.y_root)
+
+    def _open_selected_file(self) -> None:
+        """Open currently selected queue item in system default application."""
+        import os
+        import subprocess
+
+        sel = self.tree.selection()
+        if not sel or sel[0] not in self._items:
+            return
+        p = self._items[sel[0]].path
+        try:
+            os.startfile(str(p))
+        except AttributeError:
+            subprocess.Popen(["notepad", str(p)])
+
+    def _open_selected_dir(self) -> None:
+        """Open folder containing currently selected queue item."""
+        import os
+        import subprocess
+
+        sel = self.tree.selection()
+        if not sel or sel[0] not in self._items:
+            return
+        p = self._items[sel[0]].path.parent
+        try:
+            os.startfile(str(p))
+        except AttributeError:
+            subprocess.Popen(["explorer", str(p)])
+
     def _build_toolbar(self) -> None:
         """Build bottom action buttons for queue manipulation."""
         bar = ttk.Frame(self)
@@ -128,14 +175,20 @@ class DocumentQueuePanel(ttk.Frame):
         if item_id in self._items:
             self.on_file_selected(self._items[item_id].path)
 
-    def add_files(self, paths: list[str | Path]) -> int:
+    def add_files(self, paths: list[str | Path], relative_to: Path | None = None) -> int:
         """Add individual files to queue and return count added."""
         added = 0
         for p in paths:
             path_obj = Path(p).resolve()
             if not path_obj.is_file() or str(path_obj) in self._items:
                 continue
-            self._insert_item(path_obj)
+            rel = None
+            if relative_to:
+                try:
+                    rel = path_obj.relative_to(relative_to)
+                except ValueError:
+                    rel = None
+            self._insert_item(path_obj, relative_path=rel)
             added += 1
         self._update_counter()
         return added
@@ -150,16 +203,22 @@ class DocumentQueuePanel(ttk.Frame):
         resolved_exts = extensions or (self.get_extensions() if self.get_extensions else None)
         exts = normalize_extensions(resolved_exts or [".md", ".markdown"])
         files = discover_markdown_files(dir_obj, recursive=recursive, extensions=exts)
-        return self.add_files(files)
+        return self.add_files(files, relative_to=dir_obj)
 
-    def _insert_item(self, path: Path) -> None:
+    def _insert_item(self, path: Path, relative_path: Path | None = None) -> None:
         """Insert single item row into Treeview."""
         try:
             size_val = format_file_size(path.stat().st_size)
         except OSError:
             size_val = "-"
         key = str(path)
-        item = QueueItem(path=path, name=path.name, size_str=size_val, status="در انتظار")
+        item = QueueItem(
+            path=path,
+            name=path.name,
+            size_str=size_val,
+            status="در انتظار",
+            relative_path=relative_path,
+        )
         self._items[key] = item
         self.tree.insert(
             "",
@@ -183,9 +242,20 @@ class DocumentQueuePanel(ttk.Frame):
         self._items.clear()
         self._update_counter()
 
+    def reset_statuses(self) -> None:
+        """Reset all item statuses back to pending before batch run."""
+        for key, item in self._items.items():
+            item.status = "در انتظار"
+            item.error = None
+            self.tree.item(key, values=(item.name, item.size_str, item.status, str(item.path)))
+
     def get_files(self) -> list[Path]:
         """Return list of all file paths in queue."""
         return [item.path for item in self._items.values()]
+
+    def get_queue_items(self) -> list[QueueItem]:
+        """Return all QueueItem objects in queue order."""
+        return list(self._items.values())
 
     def update_status(self, file_path: Path, status: str, error: str | None = None) -> None:
         """Update display status of a file in the queue."""
@@ -204,3 +274,4 @@ class DocumentQueuePanel(ttk.Frame):
     def apply_colors(self, colors: ThemeColors) -> None:
         """Update colors based on theme changes."""
         self.counter_label.configure(foreground=colors.text_muted)
+

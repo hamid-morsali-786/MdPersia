@@ -44,23 +44,26 @@ class ParametersInspectorPanel(ttk.Frame):
         project_root: Path,
         on_convert: Callable[[], None],
         on_cancel: Callable[[], None],
+        on_watch_toggle: Callable[[], None] | None = None,
         **kwargs,
     ) -> None:
         super().__init__(parent, **kwargs)
         self.project_root = project_root
         self.on_convert = on_convert
         self.on_cancel = on_cancel
+        self.on_watch_toggle = on_watch_toggle
         self._init_variables()
         self._build_top_controls()
         self._build_tabs()
         self._build_bottom_actions()
+        self._on_format_changed()
 
     def _init_variables(self) -> None:
-        """Initialize all 30 configuration reactive variables."""
+        """Initialize all configuration reactive variables with CLI parity defaults."""
         self.format_var = tk.StringVar(value="pdf")
         self.output_var = tk.StringVar()
         self.page_format_var = tk.StringVar(value="A4")
-        self.margin_var = tk.StringVar(value="20mm")
+        self.margin_var = tk.StringVar(value="15mm")
         self.landscape_var = tk.BooleanVar(value=False)
         self.pdf_page_numbers_var = tk.BooleanVar(value=True)
         self.strip_emojis_var = tk.BooleanVar(value=False)
@@ -70,10 +73,10 @@ class ParametersInspectorPanel(ttk.Frame):
         self._init_advanced_variables()
 
     def _init_docx_variables(self) -> None:
-        self.docx_image_scale_var = tk.IntVar(value=2)
-        self.docx_image_min_width_var = tk.StringVar(value="2.0")
+        self.docx_image_scale_var = tk.IntVar(value=3)
+        self.docx_image_min_width_var = tk.StringVar(value="4.0")
         self.docx_image_max_width_var = tk.StringVar(value="6.5")
-        self.docx_font_size_var = tk.IntVar(value=11)
+        self.docx_font_size_var = tk.IntVar(value=12)
         self.docx_highlight_code_var = tk.BooleanVar(value=True)
         self.docx_page_numbers_var = tk.BooleanVar(value=True)
 
@@ -82,7 +85,7 @@ class ParametersInspectorPanel(ttk.Frame):
         self.mermaid_timeout_var = tk.StringVar(value="30")
         self.mermaid_js_var = tk.StringVar()
         self.mermaid_url_var = tk.StringVar()
-        self.ignore_mermaid_errors_var = tk.BooleanVar(value=True)
+        self.ignore_mermaid_errors_var = tk.BooleanVar(value=False)
 
     def _init_font_variables(self) -> None:
         self.font_family_var = tk.StringVar(value=DEFAULT_FONT_FAMILY)
@@ -93,11 +96,28 @@ class ParametersInspectorPanel(ttk.Frame):
     def _init_advanced_variables(self) -> None:
         self.keep_html_var = tk.BooleanVar(value=False)
         self.fail_fast_var = tk.BooleanVar(value=False)
+        self.verbose_var = tk.BooleanVar(value=False)
         self.browsers_path_var = tk.StringVar()
         self.wrap_rtl_suffix_var = tk.StringVar(value=".rtl.md")
         self.watch_var = tk.BooleanVar(value=False)
         self.recursive_var = tk.BooleanVar(value=True)
         self.extensions_var = tk.StringVar(value=".md, .markdown")
+
+    def auto_detect_assets(self, project_root: Path) -> None:
+        """Auto-detect offline browsers, mermaid script, and font directories."""
+        browsers = default_browsers_path(project_root)
+        if browsers.is_dir() and not self.browsers_path_var.get():
+            self.browsers_path_var.set(str(browsers))
+
+        mermaid = default_mermaid_path(project_root)
+        if mermaid.is_file() and not self.mermaid_js_var.get():
+            self.mermaid_js_var.set(str(mermaid))
+        elif not self.mermaid_url_var.get().strip():
+            self.mermaid_url_var.set("https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js")
+
+        fonts = default_fonts_path(project_root)
+        if fonts.is_dir() and not self.font_dir_var.get():
+            self.font_dir_var.set(str(fonts))
 
     def _build_top_controls(self) -> None:
         """Build format selector and output path picker."""
@@ -135,28 +155,28 @@ class ParametersInspectorPanel(ttk.Frame):
     def _build_tab_page(self) -> None:
         tab = ttk.Frame(self.notebook, padding=6)
         self.notebook.add(tab, text="سند و صفحه")
-        r1 = ttk.Frame(tab)
-        r1.pack(fill=tk.X, pady=2)
-    def _build_tab_page(self) -> None:
-        tab = ttk.Frame(self.notebook, padding=6)
-        self.notebook.add(tab, text="سند و صفحه")
+        self._page_geometry_controls = []
         self._pdf_controls = []
+
         r1 = ttk.Frame(tab)
         r1.pack(fill=tk.X, pady=2)
         ttk.Label(r1, text="اندازه صفحه:").pack(side=tk.LEFT)
         c1 = ttk.Combobox(r1, values=PAGE_FORMATS, textvariable=self.page_format_var, width=10)
         c1.pack(side=tk.LEFT, padx=4)
-        self._pdf_controls.append(c1)
+        self._page_geometry_controls.append(c1)
         ttk.Label(r1, text="حاشیه:").pack(side=tk.LEFT, padx=(8, 2))
         e1 = ttk.Entry(r1, textvariable=self.margin_var, width=8)
         e1.pack(side=tk.LEFT)
-        self._pdf_controls.append(e1)
+        self._page_geometry_controls.append(e1)
+
         chk1 = ttk.Checkbutton(tab, text="افقی (Landscape)", variable=self.landscape_var)
         chk1.pack(anchor=tk.W, pady=2)
-        self._pdf_controls.append(chk1)
+        self._page_geometry_controls.append(chk1)
+
         chk2 = ttk.Checkbutton(tab, text="شماره صفحه PDF", variable=self.pdf_page_numbers_var)
         chk2.pack(anchor=tk.W, pady=2)
         self._pdf_controls.append(chk2)
+
         ttk.Checkbutton(tab, text="حذف ایموجی‌ها از خروجی", variable=self.strip_emojis_var).pack(anchor=tk.W, pady=2)
 
     def _build_tab_docx(self) -> None:
@@ -199,7 +219,7 @@ class ParametersInspectorPanel(ttk.Frame):
         ttk.Combobox(r1, values=MERMAID_THEMES, textvariable=self.mermaid_theme_var, width=10).pack(side=tk.LEFT, padx=4)
         ttk.Label(r1, text="تایم‌اوت (ثانیه):").pack(side=tk.LEFT, padx=(8, 2))
         ttk.Entry(r1, textvariable=self.mermaid_timeout_var, width=6).pack(side=tk.LEFT)
-        self._build_path_row(tab, "اسکریپت Mermaid.js:", self.mermaid_js_var, is_dir=False)
+        self._build_path_row(tab, "اسکریپت Mermaid.js:", self.mermaid_js_var, is_dir=False, filetypes=[("JavaScript", "*.js")])
         r3 = ttk.Frame(tab)
         r3.pack(fill=tk.X, pady=2)
         ttk.Label(r3, text="CDN URL:").pack(side=tk.LEFT)
@@ -213,9 +233,9 @@ class ParametersInspectorPanel(ttk.Frame):
         r1.pack(fill=tk.X, pady=2)
         ttk.Label(r1, text="خانواده فونت:").pack(side=tk.LEFT)
         ttk.Entry(r1, textvariable=self.font_family_var).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=4)
-        self._build_path_row(tab, "فایل فونت اختصاصی:", self.font_file_var, is_dir=False)
+        self._build_path_row(tab, "فایل فونت اختصاصی:", self.font_file_var, is_dir=False, filetypes=[("TrueType Font", "*.ttf")])
         self._build_path_row(tab, "پوشه فونت‌ها:", self.font_dir_var, is_dir=True)
-        self._build_path_row(tab, "فایل CSS سفارشی:", self.custom_css_var, is_dir=False)
+        self._build_path_row(tab, "فایل CSS سفارشی:", self.custom_css_var, is_dir=False, filetypes=[("CSS Stylesheet", "*.css")])
 
     def _build_tab_advanced(self) -> None:
         tab = ttk.Frame(self.notebook, padding=6)
@@ -223,6 +243,7 @@ class ParametersInspectorPanel(ttk.Frame):
         ttk.Checkbutton(tab, text="جستجوی بازگشتی در زیرپوشه‌ها", variable=self.recursive_var).pack(anchor=tk.W, pady=2)
         ttk.Checkbutton(tab, text="ذخیره فایل HTML موقت (keep_html)", variable=self.keep_html_var).pack(anchor=tk.W, pady=2)
         ttk.Checkbutton(tab, text="توقف با اولین خطا (fail_fast)", variable=self.fail_fast_var).pack(anchor=tk.W, pady=2)
+        ttk.Checkbutton(tab, text="خروجی لاگ پرجزئیات (verbose)", variable=self.verbose_var).pack(anchor=tk.W, pady=2)
         self._build_path_row(tab, "مسیر مرورگرها (browsers):", self.browsers_path_var, is_dir=True)
         r = ttk.Frame(tab)
         r.pack(fill=tk.X, pady=2)
@@ -231,12 +252,14 @@ class ParametersInspectorPanel(ttk.Frame):
         ttk.Label(r, text="پسوندهای مجاز:").pack(side=tk.LEFT, padx=(8, 2))
         ttk.Entry(r, textvariable=self.extensions_var, width=16).pack(side=tk.LEFT)
 
-    def _build_path_row(self, parent: ttk.Frame, label_text: str, var: tk.StringVar, is_dir: bool) -> None:
+    def _build_path_row(
+        self, parent: ttk.Frame, label_text: str, var: tk.StringVar, is_dir: bool, filetypes: list[tuple[str, str]] | None = None
+    ) -> None:
         row = ttk.Frame(parent)
         row.pack(fill=tk.X, pady=2)
         ttk.Label(row, text=label_text).pack(side=tk.LEFT)
         ttk.Entry(row, textvariable=var).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        cmd = (lambda: self._pick_path_dir(var)) if is_dir else (lambda: self._pick_path_file(var))
+        cmd = (lambda: self._pick_path_dir(var)) if is_dir else (lambda: self._pick_path_file(var, filetypes))
         ttk.Button(row, text="...", width=3, command=cmd).pack(side=tk.LEFT)
 
     def _pick_path_dir(self, var: tk.StringVar) -> None:
@@ -244,8 +267,9 @@ class ParametersInspectorPanel(ttk.Frame):
         if path:
             var.set(str(Path(path).resolve()))
 
-    def _pick_path_file(self, var: tk.StringVar) -> None:
-        path = filedialog.askopenfilename()
+    def _pick_path_file(self, var: tk.StringVar, filetypes: list[tuple[str, str]] | None = None) -> None:
+        types = (filetypes or []) + [("همه فایل‌ها", "*.*")]
+        path = filedialog.askopenfilename(filetypes=types)
         if path:
             var.set(str(Path(path).resolve()))
 
@@ -257,21 +281,31 @@ class ParametersInspectorPanel(ttk.Frame):
         self.convert_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
         self.cancel_btn = ttk.Button(bar, text="⏹ انصراف", command=self.on_cancel, state="disabled")
         self.cancel_btn.pack(side=tk.LEFT, padx=2)
-        self.watch_btn = ttk.Checkbutton(bar, text="👁️ پایش (Watch)", variable=self.watch_var)
+        cmd = self.on_watch_toggle if self.on_watch_toggle else None
+        self.watch_btn = ttk.Checkbutton(bar, text="👁️ پایش (Watch)", variable=self.watch_var, command=cmd)
         self.watch_btn.pack(side=tk.LEFT, padx=4)
 
     def _on_format_changed(self) -> None:
         """Dynamically toggle control states based on format."""
         is_docx = self.format_var.get() == "docx"
         is_pdf = self.format_var.get() == "pdf"
+        is_document = is_docx or is_pdf
+
         for w in getattr(self, "_docx_controls", []):
             try:
                 w.configure(state="normal" if is_docx else "disabled")
             except tk.TclError:
                 pass
+
         for w in getattr(self, "_pdf_controls", []):
             try:
                 w.configure(state="normal" if is_pdf else "disabled")
+            except tk.TclError:
+                pass
+
+        for w in getattr(self, "_page_geometry_controls", []):
+            try:
+                w.configure(state="normal" if is_document else "disabled")
             except tk.TclError:
                 pass
 
@@ -313,16 +347,16 @@ class ParametersInspectorPanel(ttk.Frame):
         return "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"
 
     def build_convert_options(self) -> ConvertOptions:
-        """Build ConvertOptions dataclass instance with all 30 parameters."""
+        """Build ConvertOptions dataclass instance with all 30+ parameters."""
         fmt = self.format_var.get()
         timeout_ms = _safe_int(self.mermaid_timeout_var.get(), 30) * 1000
-        min_w = _safe_float(self.docx_image_min_width_var.get(), 2.0)
+        min_w = _safe_float(self.docx_image_min_width_var.get(), 4.0)
         max_w = _safe_float(self.docx_image_max_width_var.get(), 6.5)
 
         return ConvertOptions(
             font_family=self.font_family_var.get() or DEFAULT_FONT_FAMILY,
             font_file=_safe_path(self.font_file_var.get()),
-            font_dir=_safe_path(self.font_dir_var.get()),
+            font_dir=_safe_path(self.font_dir_var.get()) or default_fonts_path(self.project_root),
             custom_css=_safe_path(self.custom_css_var.get()),
             mermaid_source=self._resolve_mermaid_source(),
             mermaid_theme=self.mermaid_theme_var.get(),
@@ -332,7 +366,7 @@ class ParametersInspectorPanel(ttk.Frame):
             landscape=self.landscape_var.get(),
             keep_html=self.keep_html_var.get(),
             ignore_mermaid_errors=self.ignore_mermaid_errors_var.get(),
-            verbose=False,
+            verbose=self.verbose_var.get(),
             output_format=fmt,
             docx_font_size_pt=self.docx_font_size_var.get(),
             docx_image_scale=self.docx_image_scale_var.get(),
@@ -345,5 +379,4 @@ class ParametersInspectorPanel(ttk.Frame):
 
     def apply_colors(self, colors: ThemeColors) -> None:
         """Apply active theme palette to inspector."""
-        # TTK styles apply globally, but specific custom elements can update here
         pass
