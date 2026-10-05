@@ -137,31 +137,58 @@ class ParametersInspectorPanel(ttk.Frame):
         self.notebook.add(tab, text="سند و صفحه")
         r1 = ttk.Frame(tab)
         r1.pack(fill=tk.X, pady=2)
+    def _build_tab_page(self) -> None:
+        tab = ttk.Frame(self.notebook, padding=6)
+        self.notebook.add(tab, text="سند و صفحه")
+        self._pdf_controls = []
+        r1 = ttk.Frame(tab)
+        r1.pack(fill=tk.X, pady=2)
         ttk.Label(r1, text="اندازه صفحه:").pack(side=tk.LEFT)
-        ttk.Combobox(r1, values=PAGE_FORMATS, textvariable=self.page_format_var, width=10).pack(side=tk.LEFT, padx=4)
+        c1 = ttk.Combobox(r1, values=PAGE_FORMATS, textvariable=self.page_format_var, width=10)
+        c1.pack(side=tk.LEFT, padx=4)
+        self._pdf_controls.append(c1)
         ttk.Label(r1, text="حاشیه:").pack(side=tk.LEFT, padx=(8, 2))
-        ttk.Entry(r1, textvariable=self.margin_var, width=8).pack(side=tk.LEFT)
-        ttk.Checkbutton(tab, text="افقی (Landscape)", variable=self.landscape_var).pack(anchor=tk.W, pady=2)
-        ttk.Checkbutton(tab, text="شماره صفحه PDF", variable=self.pdf_page_numbers_var).pack(anchor=tk.W, pady=2)
+        e1 = ttk.Entry(r1, textvariable=self.margin_var, width=8)
+        e1.pack(side=tk.LEFT)
+        self._pdf_controls.append(e1)
+        chk1 = ttk.Checkbutton(tab, text="افقی (Landscape)", variable=self.landscape_var)
+        chk1.pack(anchor=tk.W, pady=2)
+        self._pdf_controls.append(chk1)
+        chk2 = ttk.Checkbutton(tab, text="شماره صفحه PDF", variable=self.pdf_page_numbers_var)
+        chk2.pack(anchor=tk.W, pady=2)
+        self._pdf_controls.append(chk2)
         ttk.Checkbutton(tab, text="حذف ایموجی‌ها از خروجی", variable=self.strip_emojis_var).pack(anchor=tk.W, pady=2)
 
     def _build_tab_docx(self) -> None:
         tab = ttk.Frame(self.notebook, padding=6)
         self.notebook.add(tab, text="ورد (DOCX)")
+        self._docx_controls = []
         r1 = ttk.Frame(tab)
         r1.pack(fill=tk.X, pady=2)
         ttk.Label(r1, text="مقیاس تصاویر:").pack(side=tk.LEFT)
-        ttk.Combobox(r1, values=[1, 2, 3, 4], textvariable=self.docx_image_scale_var, width=5).pack(side=tk.LEFT, padx=4)
+        c1 = ttk.Combobox(r1, values=[1, 2, 3, 4], textvariable=self.docx_image_scale_var, width=5)
+        c1.pack(side=tk.LEFT, padx=4)
+        self._docx_controls.append(c1)
         ttk.Label(r1, text="سایز فونت:").pack(side=tk.LEFT, padx=(8, 2))
-        ttk.Spinbox(r1, from_=8, to=24, textvariable=self.docx_font_size_var, width=5).pack(side=tk.LEFT)
+        sp1 = ttk.Spinbox(r1, from_=8, to=24, textvariable=self.docx_font_size_var, width=5)
+        sp1.pack(side=tk.LEFT)
+        self._docx_controls.append(sp1)
         r2 = ttk.Frame(tab)
         r2.pack(fill=tk.X, pady=2)
         ttk.Label(r2, text="حداقل عرض تصویر (اینچ):").pack(side=tk.LEFT)
-        ttk.Entry(r2, textvariable=self.docx_image_min_width_var, width=6).pack(side=tk.LEFT, padx=4)
+        e1 = ttk.Entry(r2, textvariable=self.docx_image_min_width_var, width=6)
+        e1.pack(side=tk.LEFT, padx=4)
+        self._docx_controls.append(e1)
         ttk.Label(r2, text="حداکثر عرض:").pack(side=tk.LEFT, padx=(8, 2))
-        ttk.Entry(r2, textvariable=self.docx_image_max_width_var, width=6).pack(side=tk.LEFT)
-        ttk.Checkbutton(tab, text="رنگ‌آمیزی کدها (Syntax Highlight)", variable=self.docx_highlight_code_var).pack(anchor=tk.W, pady=2)
-        ttk.Checkbutton(tab, text="شماره صفحه داینامیک Word", variable=self.docx_page_numbers_var).pack(anchor=tk.W, pady=2)
+        e2 = ttk.Entry(r2, textvariable=self.docx_image_max_width_var, width=6)
+        e2.pack(side=tk.LEFT)
+        self._docx_controls.append(e2)
+        chk1 = ttk.Checkbutton(tab, text="رنگ‌آمیزی کدها (Syntax Highlight)", variable=self.docx_highlight_code_var)
+        chk1.pack(anchor=tk.W, pady=2)
+        self._docx_controls.append(chk1)
+        chk2 = ttk.Checkbutton(tab, text="شماره صفحه داینامیک Word", variable=self.docx_page_numbers_var)
+        chk2.pack(anchor=tk.W, pady=2)
+        self._docx_controls.append(chk2)
 
     def _build_tab_mermaid(self) -> None:
         tab = ttk.Frame(self.notebook, padding=6)
@@ -193,6 +220,7 @@ class ParametersInspectorPanel(ttk.Frame):
     def _build_tab_advanced(self) -> None:
         tab = ttk.Frame(self.notebook, padding=6)
         self.notebook.add(tab, text="پیشرفته")
+        ttk.Checkbutton(tab, text="جستجوی بازگشتی در زیرپوشه‌ها", variable=self.recursive_var).pack(anchor=tk.W, pady=2)
         ttk.Checkbutton(tab, text="ذخیره فایل HTML موقت (keep_html)", variable=self.keep_html_var).pack(anchor=tk.W, pady=2)
         ttk.Checkbutton(tab, text="توقف با اولین خطا (fail_fast)", variable=self.fail_fast_var).pack(anchor=tk.W, pady=2)
         self._build_path_row(tab, "مسیر مرورگرها (browsers):", self.browsers_path_var, is_dir=True)
@@ -233,9 +261,32 @@ class ParametersInspectorPanel(ttk.Frame):
         self.watch_btn.pack(side=tk.LEFT, padx=4)
 
     def _on_format_changed(self) -> None:
-        """Handle format switch and update state."""
-        # Selection triggers reactivity
-        pass
+        """Dynamically toggle control states based on format."""
+        is_docx = self.format_var.get() == "docx"
+        is_pdf = self.format_var.get() == "pdf"
+        for w in getattr(self, "_docx_controls", []):
+            try:
+                w.configure(state="normal" if is_docx else "disabled")
+            except tk.TclError:
+                pass
+        for w in getattr(self, "_pdf_controls", []):
+            try:
+                w.configure(state="normal" if is_pdf else "disabled")
+            except tk.TclError:
+                pass
+
+    def is_docx_active(self) -> bool:
+        """Return True if DOCX format is currently active."""
+        return self.format_var.get() == "docx"
+
+    def get_extensions(self) -> list[str]:
+        """Extract allowed extensions from input field."""
+        raw = self.extensions_var.get().replace(",", " ").split()
+        return [ext.strip() for ext in raw if ext.strip()] or [".md", ".markdown"]
+
+    def get_recursive(self) -> bool:
+        """Return recursive directory scanning preference."""
+        return self.recursive_var.get()
 
     def set_format(self, format_name: str) -> None:
         self.format_var.set(format_name)

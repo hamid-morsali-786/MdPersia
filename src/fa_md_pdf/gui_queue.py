@@ -41,10 +41,14 @@ class DocumentQueuePanel(ttk.Frame):
         self,
         parent: tk.Widget,
         on_file_selected: Callable[[Path], None] | None = None,
+        get_extensions: Callable[[], list[str]] | None = None,
+        get_recursive: Callable[[], bool] | None = None,
         **kwargs,
     ) -> None:
         super().__init__(parent, **kwargs)
         self.on_file_selected = on_file_selected
+        self.get_extensions = get_extensions
+        self.get_recursive = get_recursive
         self._items: dict[str, QueueItem] = {}
         self._build_header()
         self._build_treeview()
@@ -111,7 +115,9 @@ class DocumentQueuePanel(ttk.Frame):
         """Open directory dialog to pick folder containing markdown files."""
         path = filedialog.askdirectory(title="انتخاب فولدر فایل‌های Markdown")
         if path:
-            self.add_directory(path, recursive=True)
+            rec = self.get_recursive() if self.get_recursive else True
+            exts = self.get_extensions() if self.get_extensions else None
+            self.add_directory(path, recursive=rec, extensions=exts)
 
     def _on_tree_select(self, _event: tk.Event) -> None:
         """Handle tree selection change and trigger callback."""
@@ -141,7 +147,8 @@ class DocumentQueuePanel(ttk.Frame):
         dir_obj = Path(dir_path).resolve()
         if not dir_obj.is_dir():
             return 0
-        exts = normalize_extensions(extensions or [".md", ".markdown"])
+        resolved_exts = extensions or (self.get_extensions() if self.get_extensions else None)
+        exts = normalize_extensions(resolved_exts or [".md", ".markdown"])
         files = discover_markdown_files(dir_obj, recursive=recursive, extensions=exts)
         return self.add_files(files)
 

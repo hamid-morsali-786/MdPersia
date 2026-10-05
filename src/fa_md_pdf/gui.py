@@ -41,6 +41,25 @@ class ProgressEvent:
     error: str | None = None
 
 
+def _resolve_job_output_path(
+    source: Path, output_dir: Path | None, ext: str, used_paths: set[Path]
+) -> Path:
+    """Resolve non-colliding destination path for batch conversion."""
+    if not output_dir:
+        return source.with_suffix(ext)
+    candidate = output_dir / source.with_suffix(ext).name
+    if candidate not in used_paths:
+        used_paths.add(candidate)
+        return candidate
+    counter = 2
+    while True:
+        candidate = output_dir / f"{source.stem}_{counter}{ext}"
+        if candidate not in used_paths:
+            used_paths.add(candidate)
+            return candidate
+        counter += 1
+
+
 class ConversionThread(threading.Thread):
     """Background thread that runs conversions and posts progress events."""
 
@@ -50,12 +69,14 @@ class ConversionThread(threading.Thread):
         options: ConvertOptions,
         progress_queue: queue.Queue[ProgressEvent],
         cancel_event: threading.Event,
+        fail_fast: bool = False,
     ) -> None:
         super().__init__(daemon=True)
         self.jobs = jobs
         self.options = options
         self.progress_queue = progress_queue
         self.cancel_event = cancel_event
+        self.fail_fast = fail_fast
         self._completed = 0
 
     def _on_progress(self, job: ConvertJob, ok: bool, error: str | None) -> None:
@@ -77,8 +98,7 @@ class ConversionThread(threading.Thread):
             convert_jobs(
                 self.jobs,
                 options=self.options,
-                fail_fast=not self.options.ignore_mermaid_errors
-                and getattr(self.options, "_fail_fast", False),
+                fail_fast=self.fail_fast,
                 on_progress=self._on_progress,
                 cancel_event=self.cancel_event,
             )
@@ -91,6 +111,56 @@ class ConversionThread(threading.Thread):
         )
 
 
+class WrapRtlThread(threading.Thread):
+    """Background worker thread for wrap-rtl markdown transformations."""
+
+    def __init__(
+        self,
+        files: list[Path],
+        output_dir: Path | None,
+        suffix: str,
+        progress_queue: queue.Queue[ProgressEvent],
+        cancel_event: threading.Event,
+        fail_fast: bool = False,
+    ) -> None:
+        super().__init__(daemon=True)
+        self.files = files
+        self.output_dir = output_dir
+        self.suffix = suffix
+        self.progress_queue = progress_queue
+        self.cancel_event = cancel_event
+        self.fail_fast = fail_fast
+
+    def run(self) -> None:
+        from .rtl_wrapper import WrapOptions, wrap_rtl_in_markdown
+
+        opts = WrapOptions(enabled=True)
+        total = len(self.files)
+        self.progress_queue.put(ProgressEvent(event_type="start", total=total))
+        completed = 0
+        used_paths: set[Path] = set()
+
+        for f in self.files:
+            if self.cancel_event.is_set():
+                break
+            dest = _resolve_job_output_path(f, self.output_dir, self.suffix, used_paths)
+            try:
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                dest.write_text(wrap_rtl_in_markdown(f.read_text(encoding="utf-8-sig"), opts), encoding="utf-8")
+                completed += 1
+                job = ConvertJob(source=f, output=dest)
+                self.progress_queue.put(ProgressEvent(event_type="success", job=job, total=total, completed=completed))
+            except Exception as exc:  # noqa: BLE001
+                completed += 1
+                job = ConvertJob(source=f, output=dest)
+                self.progress_queue.put(ProgressEvent(event_type="error", job=job, total=total, completed=completed, error=str(exc)))
+                if self.fail_fast:
+                    break
+
+        ev_type = "cancelled" if self.cancel_event.is_set() else "done"
+        self.progress_queue.put(ProgressEvent(event_type=ev_type, total=total, completed=completed))
+
+
 class MainWindow:
     """Main modern 3-zone desktop application window."""
 
@@ -99,7 +169,7 @@ class MainWindow:
         self.project_root = project_root
         self.progress_queue: queue.Queue[ProgressEvent] = queue.Queue()
         self.cancel_event = threading.Event()
-        self.conversion_thread: ConversionThread | None = None
+        self.conversion_thread: threading.Thread | None = None
         self.is_watching = False
         self._watch_timer_id: str | None = None
         self._watched_jobs: list[ConvertJob] = []
@@ -123,14 +193,17 @@ class MainWindow:
         self.paned = ttk.PanedWindow(self.root, orient=tk.HORIZONTAL)
         self.paned.pack(fill=tk.BOTH, expand=True, padx=6, pady=4)
 
-        self.queue_panel = DocumentQueuePanel(
-            self.paned, on_file_selected=self._on_queue_file_selected
-        )
         self.inspector_panel = ParametersInspectorPanel(
             self.paned,
             project_root=self.project_root,
             on_convert=self._start_conversion,
             on_cancel=self._cancel_conversion,
+        )
+        self.queue_panel = DocumentQueuePanel(
+            self.paned,
+            on_file_selected=self._on_queue_file_selected,
+            get_extensions=self.inspector_panel.get_extensions,
+            get_recursive=self.inspector_panel.get_recursive,
         )
         self.workspace_panel = LivePreviewConsolePanel(self.paned)
         self.paned.add(self.queue_panel, weight=2)
@@ -187,7 +260,7 @@ class MainWindow:
 
         fmt = self.format_var.get()
         if fmt == "wrap-rtl":
-            self._run_wrap_rtl_queue(files)
+            self._launch_wrap_rtl_thread(files)
             return
 
         if not self._validate_environment():
@@ -224,11 +297,12 @@ class MainWindow:
     def _create_jobs_from_queue(
         self, files: list[Path], output_dir: Path | None, fmt: str, keep_html: bool
     ) -> list[ConvertJob]:
-        """Convert list of paths into ConvertJob records."""
+        """Convert list of paths into ConvertJob records with path collision protection."""
         jobs: list[ConvertJob] = []
         ext = ".docx" if fmt == "docx" else ".pdf"
+        used_paths: set[Path] = set()
         for f in files:
-            out_file = (output_dir / f.with_suffix(ext).name) if output_dir else f.with_suffix(ext)
+            out_file = _resolve_job_output_path(f, output_dir, ext, used_paths)
             html_out = f.with_suffix(".html") if keep_html else None
             jobs.append(ConvertJob(source=f, output=out_file, html_output=html_out))
         return jobs
@@ -247,28 +321,29 @@ class MainWindow:
             options=options,
             progress_queue=self.progress_queue,
             cancel_event=self.cancel_event,
+            fail_fast=self.inspector_panel.fail_fast_var.get(),
         )
         self.conversion_thread.start()
         self._poll_progress()
 
-    def _run_wrap_rtl_queue(self, files: list[Path]) -> None:
-        """Run wrap-rtl transformation on queued files."""
-        from .rtl_wrapper import WrapOptions, wrap_rtl_in_markdown
-
-        opts = WrapOptions(enabled=True)
+    def _launch_wrap_rtl_thread(self, files: list[Path]) -> None:
+        """Launch background thread for wrap-rtl transformation."""
+        self.workspace_panel.append_log(f"شروع تولید Markdown با جهت RTL ({len(files)} فایل)...", "info")
+        self.inspector_panel.set_running_state(is_running=True)
+        self.cancel_event.clear()
         suffix = self.inspector_panel.wrap_rtl_suffix_var.get() or ".rtl.md"
         output_dir = Path(self.output_var.get().strip()) if self.output_var.get().strip() else None
 
-        for f in files:
-            try:
-                dest = (output_dir / f.with_suffix(suffix).name) if output_dir else f.with_suffix(suffix)
-                dest.parent.mkdir(parents=True, exist_ok=True)
-                dest.write_text(wrap_rtl_in_markdown(f.read_text(encoding="utf-8-sig"), opts), encoding="utf-8")
-                self.workspace_panel.append_log(f"✓ {f.name} → {dest.name}", "success")
-                self.queue_panel.update_status(f, "موفق")
-            except Exception as exc:
-                self.workspace_panel.append_log(f"✗ {f.name} خطا: {exc}", "error")
-                self.queue_panel.update_status(f, "خطا", str(exc))
+        self.conversion_thread = WrapRtlThread(
+            files=files,
+            output_dir=output_dir,
+            suffix=suffix,
+            progress_queue=self.progress_queue,
+            cancel_event=self.cancel_event,
+            fail_fast=self.inspector_panel.fail_fast_var.get(),
+        )
+        self.conversion_thread.start()
+        self._poll_progress()
 
     def _poll_progress(self) -> None:
         """Process background progress events and reschedule."""
@@ -282,6 +357,13 @@ class MainWindow:
         if self.conversion_thread and self.conversion_thread.is_alive():
             self.root.after(80, self._poll_progress)
         else:
+            # Final drain of remaining queue events
+            try:
+                while True:
+                    ev = self.progress_queue.get_nowait()
+                    self._handle_progress_event(ev)
+            except queue.Empty:
+                pass
             self._on_conversion_finished()
 
     def _handle_progress_event(self, ev: ProgressEvent) -> None:
@@ -315,11 +397,14 @@ class MainWindow:
             self.status_bar.reset()
 
     def _record_watched_mtimes(self) -> None:
-        self._watched_mtimes = {
-            j.source: j.source.stat().st_mtime
-            for j in self._watched_jobs
-            if j.source.is_file()
-        }
+        mtimes: dict[Path, float] = {}
+        for j in self._watched_jobs:
+            if j.source.is_file():
+                try:
+                    mtimes[j.source] = j.source.stat().st_mtime
+                except OSError:
+                    pass
+        self._watched_mtimes = mtimes
 
     def _schedule_watch_poll(self) -> None:
         if self.is_watching:
@@ -328,10 +413,14 @@ class MainWindow:
     def _check_watched_files(self) -> None:
         if not self.is_watching or not self._watched_options:
             return
-        changed = [
-            j.source for j in self._watched_jobs
-            if j.source.is_file() and j.source.stat().st_mtime > self._watched_mtimes.get(j.source, 0)
-        ]
+        changed: list[Path] = []
+        for j in self._watched_jobs:
+            if j.source.is_file():
+                try:
+                    if j.source.stat().st_mtime > self._watched_mtimes.get(j.source, 0):
+                        changed.append(j.source)
+                except OSError:
+                    pass
         if changed:
             self.workspace_panel.append_log(f"تغییر در {len(changed)} فایل شناسایی شد. تبدیل مجدد...", "info")
             self._launch_conversion_thread(self._watched_jobs, self._watched_options)
@@ -339,7 +428,7 @@ class MainWindow:
             self._schedule_watch_poll()
 
     def _cancel_conversion(self) -> None:
-        """Terminate active conversion or watch mode."""
+        """Terminate active conversion or watch mode safely."""
         self.cancel_event.set()
         if self.is_watching:
             self.is_watching = False
@@ -351,8 +440,11 @@ class MainWindow:
                     pass
                 self._watch_timer_id = None
 
-        self.inspector_panel.set_running_state(is_running=False, is_watching=False)
-        self.status_bar.reset()
+        if self.conversion_thread and self.conversion_thread.is_alive():
+            self.cancel_btn.configure(text="در حال توقف...", state="disabled")
+        else:
+            self.inspector_panel.set_running_state(is_running=False, is_watching=False)
+            self.status_bar.reset()
 
 
 def launch_gui(project_root: Path | None = None) -> None:
