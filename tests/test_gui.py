@@ -4,16 +4,6 @@ import pytest
 from fa_md_pdf.gui import MainWindow
 
 
-@pytest.fixture(scope="module")
-def tk_root():
-    root = tk.Tk()
-    root.withdraw()
-    yield root
-    try:
-        root.destroy()
-    except Exception:
-        pass
-
 
 def test_main_window_init(tk_root, tmp_path):
     app = MainWindow(tk_root, tmp_path)

@@ -5,16 +5,6 @@ from fa_md_pdf.gui_queue import DocumentQueuePanel, QueueItem
 from fa_md_pdf.gui_theme import DARK_PALETTE
 
 
-@pytest.fixture(scope="module")
-def tk_root():
-    root = tk.Tk()
-    root.withdraw()
-    yield root
-    try:
-        root.destroy()
-    except Exception:
-        pass
-
 
 def test_queue_add_files_and_clear(tk_root, tmp_path):
     f1 = tmp_path / "doc1.md"

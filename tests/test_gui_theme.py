@@ -3,16 +3,6 @@ import pytest
 from fa_md_pdf.gui_theme import ModernThemeManager, ThemeColors, ThemeFonts
 
 
-@pytest.fixture(scope="module")
-def tk_root():
-    root = tk.Tk()
-    root.withdraw()
-    yield root
-    try:
-        root.destroy()
-    except Exception:
-        pass
-
 
 def test_theme_manager_initialization(tk_root):
     manager = ModernThemeManager(tk_root)
