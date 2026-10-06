@@ -1,0 +1,20 @@
+[package]
+name = "fa-md-pdf-desktop"
+version = "1.0.0"
+description = "Modern Persian Markdown to PDF/DOCX Desktop Workbench"
+authors = ["fa-md-pdf team"]
+edition = "2021"
+
+[lib]
+name = "fa_md_pdf_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.0.0", features = [] }
+
+[dependencies]
+tauri = { version = "2.0.0", features = [] }
+tauri-plugin-shell = "2.0.0"
+tauri-plugin-dialog = "2.0.0"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

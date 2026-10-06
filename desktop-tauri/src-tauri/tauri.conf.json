@@ -1,0 +1,33 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "fa-md-pdf",
+  "version": "1.0.0",
+  "identifier": "com.famddf.desktop",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "fa-md-pdf | تبدیل تخصصی مارک‌داون فارسی به PDF و DOCX",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 1024,
+        "minHeight": 650,
+        "resizable": true,
+        "decorations": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all"
+  }
+}

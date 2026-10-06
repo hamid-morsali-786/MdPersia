@@ -1,0 +1,86 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  :root {
+    --font-sans: 'Vazirmatn', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+
+    /* Light Theme (Default) */
+    --bg-app: #F8FAFC;
+    --bg-surface: #FFFFFF;
+    --bg-card: #FFFFFF;
+    --bg-subtle: #F1F5F9;
+    --bg-hover: #E2E8F0;
+    --border-main: #E2E8F0;
+    --border-subtle: #CBD5E1;
+    --text-main: #0F172A;
+    --text-muted: #475569;
+    --text-dim: #94A3B8;
+    --input-bg: #FFFFFF;
+    --input-border: #CBD5E1;
+    --tab-inactive: #64748B;
+  }
+
+  .dark {
+    /* Dark Theme */
+    --bg-app: #0B1120;
+    --bg-surface: #111827;
+    --bg-card: #131D31;
+    --bg-subtle: #1E293B;
+    --bg-hover: #283548;
+    --border-main: #1E293B;
+    --border-subtle: #334155;
+    --text-main: #F8FAFC;
+    --text-muted: #94A3B8;
+    --text-dim: #64748B;
+    --input-bg: #0F172A;
+    --input-border: #334155;
+    --tab-inactive: #94A3B8;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    background-color: var(--bg-app);
+    color: var(--text-main);
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
+}
+
+/* Semantic Theme Helpers */
+.bg-app { background-color: var(--bg-app); }
+.bg-surface { background-color: var(--bg-surface); }
+.bg-card { background-color: var(--bg-card); }
+.bg-subtle { background-color: var(--bg-subtle); }
+.bg-hover:hover { background-color: var(--bg-hover); }
+.border-main { border-color: var(--border-main); }
+.border-subtle { border-color: var(--border-subtle); }
+.text-main { color: var(--text-main); }
+.text-muted { color: var(--text-muted); }
+.text-dim { color: var(--text-dim); }
+.bg-input { background-color: var(--input-bg); }
+.border-input { border-color: var(--input-border); }
+
+/* Custom Sleek Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.25);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.45);
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
