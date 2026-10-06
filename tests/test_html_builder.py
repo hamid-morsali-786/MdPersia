@@ -82,3 +82,28 @@ def test_html_strip_emojis_option(tmp_path: Path):
     assert "⚠️" not in doc.html
     assert "عنوان تستی" in doc.html
     assert '<div class="callout-title">نکته</div>' in doc.html
+
+
+def test_strip_emojis_preserves_persian_zwj_and_zwnj():
+    from fa_md_pdf.html_builder import strip_emojis
+
+    # \u200C is ZWNJ (نیم‌فاصله), \u200D is ZWJ (اتصال‌دهنده صفر-عرض)
+    sample = "کتاب\u200Cها و اتصال\u200Dنما همراه با 😊 و 🚀 در متن."
+    cleaned = strip_emojis(sample)
+
+    assert "\u200C" in cleaned, "ZWNJ must be preserved"
+    assert "\u200D" in cleaned, "ZWJ must be preserved for Persian typography"
+    assert "😊" not in cleaned
+    assert "🚀" not in cleaned
+    assert cleaned == "کتاب\u200Cها و اتصال\u200Dنما همراه با و در متن."
+
+
+def test_build_font_css_empty_dir(tmp_path: Path):
+    from fa_md_pdf.html_builder import build_font_css
+
+    empty_dir = tmp_path / "empty_fonts"
+    empty_dir.mkdir()
+
+    css = build_font_css("Vazirmatn", font_file=None, font_dir=empty_dir)
+    assert 'font-family: Vazirmatn;' in css
+    assert "@font-face" not in css

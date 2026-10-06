@@ -61,20 +61,15 @@ EMOJI_PATTERN: Final[re.Pattern[str]] = re.compile(
     r"|[\U0001F1E6-\U0001F1FF]"
     r"|[\u203C\u2049\u2122\u2139\u2194-\u2199\u21A9-\u21AA\u25AA-\u25AB\u25B6\u25C0\u25FB-\u25FE\u2934-\u2935]"
     r"|[\uFE0E\uFE0F]"
-    r"|[\u200D]"
     r")+"
 )
 
 
 def strip_emojis(text: str) -> str:
-    """Remove emojis and normalize surrounding spaces from text without removing newlines."""
-    res = EMOJI_PATTERN.sub("", text)
-    res = re.sub(r"[ \t]{2,}", " ", res)
+    """Remove emojis and normalize spaces without removing newlines or Persian typography characters."""
+    res = re.sub(r"[ \t]{2,}", " ", EMOJI_PATTERN.sub("", text))
     res = re.sub(r"\([ \t]+", "(", res)
-    res = re.sub(r"[ \t]+\)", ")", res)
-    res = re.sub(r"\|[ \t]{2,}", "| ", res)
-    res = re.sub(r"[ \t]{2,}\|", " |", res)
-    return res
+    return re.sub(r"[ \t]+\)", ")", res)
 
 
 @dataclass(frozen=True)
@@ -203,13 +198,6 @@ def _build_vazirmatn_font_dir_css(font_family: str, font_dir: Path) -> str:
 }}
 """
         )
-
-    if not rules:
-        return f"""
-body {{
-  font-family: {font_family};
-}}
-"""
 
     rules.append(
         f"""
