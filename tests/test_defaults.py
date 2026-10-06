@@ -38,3 +38,18 @@ def test_resolve_user_path_prefers_cwd_existing_file(tmp_path: Path, monkeypatch
     monkeypatch.chdir(cwd)
 
     assert resolve_user_path(Path("x.css"), project) == file_in_cwd.resolve()
+
+
+def test_find_preferred_font_file(tmp_path: Path):
+    from fa_md_pdf.defaults import find_preferred_font_file
+
+    fonts = tmp_path / "fonts"
+    fonts.mkdir()
+    assert find_preferred_font_file(fonts) is None
+
+    (fonts / "Vazirmatn-Medium.ttf").write_text("", encoding="utf-8")
+    assert find_preferred_font_file(fonts) == (fonts / "Vazirmatn-Medium.ttf").resolve()
+
+    (fonts / "Vazirmatn-Regular.ttf").write_text("", encoding="utf-8")
+    assert find_preferred_font_file(fonts) == (fonts / "Vazirmatn-Regular.ttf").resolve()
+

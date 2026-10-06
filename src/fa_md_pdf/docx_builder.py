@@ -4,7 +4,7 @@ import re
 from dataclasses import dataclass, replace
 from html.parser import HTMLParser
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Callable
 
 from docx import Document
 from docx.enum.section import WD_ORIENT
@@ -45,28 +45,28 @@ PAGE_FORMAT_DIMENSIONS: dict[str, tuple[float, float]] = {
 }
 
 
+UNIT_CONVERTERS: dict[str, Any] = {
+    "mm": Mm,
+    "cm": Cm,
+    "in": Inches,
+    "inch": Inches,
+    "pt": Pt,
+    "px": lambda v: Inches(v / 96.0),
+}
+
+
 def parse_docx_length(margin_str: str) -> Length:
     """Parse length string (e.g. '5mm', '15mm', '0.5in', '1.5cm', '20px') into docx Length."""
-    s = (margin_str or "").strip().lower()
-    m = re.match(r"^([\d.]+)\s*(mm|cm|in|inch|pt|px)?$", s)
+    m = re.match(r"^([\d.]+)\s*(mm|cm|in|inch|pt|px)?$", (margin_str or "").strip().lower())
     if not m:
         return Mm(15.0)
     try:
         val = float(m.group(1))
     except ValueError:
         return Mm(15.0)
-    unit = m.group(2) or "mm"
-    if unit == "mm":
-        return Mm(val)
-    if unit == "cm":
-        return Cm(val)
-    if unit in ("in", "inch"):
-        return Inches(val)
-    if unit == "pt":
-        return Pt(val)
-    if unit == "px":
-        return Inches(val / 96.0)
-    return Mm(val)
+    converter = UNIT_CONVERTERS.get(m.group(2) or "mm", Mm)
+    return converter(val)
+
 
 
 @dataclass(frozen=True)

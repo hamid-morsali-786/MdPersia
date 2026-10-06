@@ -214,3 +214,17 @@ def test_docx_embeds_html_block_image_and_caption(tmp_path: Path) -> None:
     # 3. Hyperlink in caption should exist
     hyperlinks = caption_p[0]._p.xpath('.//w:hyperlink')
     assert len(hyperlinks) >= 1
+
+
+def test_parse_docx_length():
+    from docx.shared import Cm, Inches, Mm, Pt
+    from fa_md_pdf.docx_builder import parse_docx_length
+
+    assert parse_docx_length("15mm") == Mm(15.0)
+    assert parse_docx_length("2.5cm") == Cm(2.5)
+    assert parse_docx_length("1in") == Inches(1.0)
+    assert parse_docx_length("12pt") == Pt(12.0)
+    assert parse_docx_length("96px") == Inches(1.0)
+    assert parse_docx_length("invalid") == Mm(15.0)
+    assert parse_docx_length("") == Mm(15.0)
+

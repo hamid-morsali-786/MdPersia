@@ -64,15 +64,8 @@ class ConvertResult:
 
 
 def normalize_extensions(values: Iterable[str]) -> tuple[str, ...]:
-    extensions: list[str] = []
-    for value in values:
-        value = value.strip().lower()
-        if not value:
-            continue
-        if not value.startswith("."):
-            value = "." + value
-        extensions.append(value)
-    return tuple(dict.fromkeys(extensions)) or (".md", ".markdown")
+    exts = tuple(dict.fromkeys(f".{v.strip().lstrip('.').lower()}" for v in values if v.strip()))
+    return exts or (".md", ".markdown")
 
 
 def is_markdown_file(path: Path, extensions: Iterable[str]) -> bool:

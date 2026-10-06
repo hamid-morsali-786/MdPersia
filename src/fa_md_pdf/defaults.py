@@ -18,18 +18,12 @@ PREFERRED_FONT_FILES = (
 )
 
 
-def _path_parents(start: Path) -> Iterable[Path]:
-    """Yield start directory and all parents, without requiring the path to exist."""
-    try:
-        resolved = start.resolve()
-    except OSError:
-        resolved = start.absolute()
+def _path_parents(start: Path) -> list[Path]:
+    """Return start directory and all parents."""
+    resolved = start.resolve()
+    base = resolved.parent if (resolved.suffix and not resolved.is_dir()) else resolved
+    return [base, *base.parents]
 
-    if resolved.suffix and not resolved.is_dir():
-        resolved = resolved.parent
-
-    yield resolved
-    yield from resolved.parents
 
 
 def find_project_root(input_path: Path | None = None, cwd: Path | None = None) -> Path:
@@ -120,8 +114,4 @@ def set_playwright_browsers_path(path: Path | None, *, force: bool = False) -> P
 
 
 def find_preferred_font_file(fonts_dir: Path) -> Path | None:
-    for name in PREFERRED_FONT_FILES:
-        candidate = fonts_dir / name
-        if candidate.is_file():
-            return candidate.resolve()
-    return None
+    return next((p.resolve() for name in PREFERRED_FONT_FILES if (p := fonts_dir / name).is_file()), None)
