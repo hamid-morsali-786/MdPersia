@@ -40,7 +40,6 @@ dev = [
 
 [project.scripts]
 fa-md-pdf = "fa_md_pdf.cli:main"
-fa-md-pdf-gui = "fa_md_pdf.gui:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -19,12 +19,7 @@ if (-not (& .\.venv\Scripts\pip.exe show pyinstaller 2>$null)) {
 
 # Build CLI exe
 Write-Host "`n--- Building fa-md-pdf.exe (CLI) ---" -ForegroundColor Green
-$prevEA = $ErrorActionPreference
-$ErrorActionPreference = "Continue"
 & .\.venv\Scripts\pyinstaller.exe fa-md-pdf.spec --noconfirm
-Write-Host "`n--- Building fa-md-pdf-gui.exe (GUI) ---" -ForegroundColor Green
-& .\.venv\Scripts\pyinstaller.exe fa-md-pdf-gui.spec --noconfirm
-$ErrorActionPreference = $prevEA
 
 # Show results
 Write-Host "`n=== Build Results ===" -ForegroundColor Cyan
@@ -38,8 +33,7 @@ Write-Host @"
 
 Usage:
   .\dist\fa-md-pdf.exe .\docs              # CLI conversion
-  .\dist\fa-md-pdf.exe --gui               # Open GUI from CLI
-  .\dist\fa-md-pdf-gui.exe                 # Open GUI directly
+  .\dist\fa-md-pdf.exe --gui               # Launch Desktop GUI (Tauri)
 
 Note: Place browsers/, fonts/, and vendor/ next to the exe for offline operation.
 "@ -ForegroundColor Gray

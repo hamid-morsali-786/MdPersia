@@ -359,28 +359,81 @@ def _run_wrap_rtl(args: argparse.Namespace) -> int:
                 break
 
     print(f"Done: {successes} succeeded, {failures} failed.")
+
+    if args.watch:
+        print(f"\n[fa-md-pdf] Watching for changes in {input_path} (Press Ctrl+C to stop)...")
+        import time
+
+        def get_wrap_mtimes() -> dict[Path, float]:
+            mtimes: dict[Path, float] = {}
+            for src in sources:
+                if src.is_file():
+                    try:
+                        mtimes[src] = src.stat().st_mtime
+                    except OSError:
+                        pass
+            return mtimes
+
+        last_mtimes = get_wrap_mtimes()
+        try:
+            while True:
+                time.sleep(1.0)
+                current_mtimes = get_wrap_mtimes()
+                changed = [
+                    s for s, mt in current_mtimes.items()
+                    if s not in last_mtimes or mt > last_mtimes[s]
+                ]
+                if changed:
+                    print(f"\n[fa-md-pdf] Detected changes in {len(changed)} file(s). Re-transforming...")
+                    for s in changed:
+                        try:
+                            txt = s.read_text(encoding="utf-8-sig")
+                            tf = wrap_rtl_in_markdown(txt, options)
+                            dest = _resolve_wrap_rtl_output(s, output, input_root, suffix)
+                            dest.parent.mkdir(parents=True, exist_ok=True)
+                            dest.write_text(tf, encoding="utf-8")
+                            print(f"OK  {s} -> {dest}")
+                        except Exception as ex:  # noqa: BLE001
+                            print(f"ERR {s}: {ex}", file=sys.stderr)
+                    last_mtimes = get_wrap_mtimes()
+        except KeyboardInterrupt:
+            print("\n[fa-md-pdf] Watch stopped.")
+
     return 1 if failures else 0
+
+
+def _normalize_rtl_suffix(suffix: str, default_ext: str) -> str:
+    """Normalize suffix so that .rtl or .rtl.md results in a single clean extension."""
+    if not suffix:
+        return ""
+    clean = suffix.strip()
+    if clean.endswith(".markdown"):
+        clean = clean[:-9]
+    elif clean.endswith(".md"):
+        clean = clean[:-3]
+    clean = clean.strip(".")
+    return f".{clean}" if clean else ""
 
 
 def _resolve_wrap_rtl_output(
     source: Path, output: Path | None, input_root: Path | None, suffix: str
 ) -> Path:
-    """Compute output path for wrap-rtl transform."""
+    """Compute output path for wrap-rtl transform with clean suffix handling."""
+    clean_suffix = _normalize_rtl_suffix(suffix, source.suffix)
+    target_name = (
+        f"{source.stem}{clean_suffix}{source.suffix}" if clean_suffix else source.name
+    )
+
     if output is None:
-        # In-place: write next to source with a suffix before .md
-        if suffix:
-            return source.with_suffix(f"{suffix}{source.suffix}")
-        return source
+        return source.parent / target_name
 
     if input_root is None:
-        # Single file with explicit output
         if output.suffix.lower() in {".md", ".markdown"}:
             return output
-        return output / source.name
+        return output / target_name
 
-    # Directory mode: preserve subdirectory structure
     relative = source.relative_to(input_root)
-    return output / relative
+    return output / relative.parent / target_name
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -388,10 +441,26 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.gui:
-        from .gui import launch_gui
+        import subprocess
 
-        launch_gui()
-        return 0
+        project_root = find_project_root()
+        tauri_dir = project_root / "desktop-tauri"
+        release_exe = (
+            tauri_dir
+            / "src-tauri"
+            / "target"
+            / "release"
+            / "fa-md-pdf-desktop.exe"
+        )
+        if release_exe.is_file():
+            subprocess.Popen([str(release_exe)])
+            return 0
+        if tauri_dir.is_dir():
+            print("[fa-md-pdf] Launching Desktop GUI (Tauri)...")
+            subprocess.Popen(["npm", "run", "dev"], cwd=str(tauri_dir), shell=True)
+            return 0
+        print("Error: Graphical interface is provided by desktop-tauri.", file=sys.stderr)
+        return 1
 
     if args.input is None:
         parser.error("the following arguments are required: input (or use --gui)")
@@ -468,7 +537,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Done: {len(successes)} succeeded, {len(failures)} failed.")
 
         if args.watch:
-            print(f"\n[fa-md-pdf] Watching for changes in {input_path} (Press Ctrl+C to stop)...")
+            print(f"\n[fa-md-pdf] Watching for changes in {args.input} (Press Ctrl+C to stop)...")
             import time
 
             def get_mtimes() -> dict[Path, float]:

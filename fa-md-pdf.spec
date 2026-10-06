@@ -2,7 +2,7 @@
 
 
 a = Analysis(
-    ['entry_point.py'],
+    ['src/fa_md_pdf/__main__.py'],
     pathex=[],
     binaries=[],
     datas=[('src/fa_md_pdf/assets/default.css', 'fa_md_pdf/assets')],
