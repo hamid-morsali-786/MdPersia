@@ -11,6 +11,7 @@ from .converter import (
     build_jobs,
     convert_jobs,
     normalize_extensions,
+    output_for_file,
 )
 from .defaults import (
     default_browsers_path,
@@ -423,17 +424,7 @@ def _resolve_wrap_rtl_output(
     target_name = (
         f"{source.stem}{clean_suffix}{source.suffix}" if clean_suffix else source.name
     )
-
-    if output is None:
-        return source.parent / target_name
-
-    if input_root is None:
-        if output.suffix.lower() in {".md", ".markdown"}:
-            return output
-        return output / target_name
-
-    relative = source.relative_to(input_root)
-    return output / relative.parent / target_name
+    return output_for_file(source, input_root, output, target_name=target_name)
 
 
 def main(argv: list[str] | None = None) -> int:

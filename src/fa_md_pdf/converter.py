@@ -83,20 +83,21 @@ def output_for_file(
     input_root: Path | None,
     output: Path | None,
     output_format: str = "pdf",
+    target_name: str | None = None,
 ) -> Path:
-    suffix = f".{output_format}"
-    target_suffixes = {".pdf", ".docx"}
+    target_name = target_name or source.with_suffix(f".{output_format}").name
+    target_suffixes = {".pdf", ".docx", ".md", ".markdown"}
 
     if output is None:
-        return source.with_suffix(suffix)
+        return source.parent / target_name
 
     if input_root is None:
         if output.suffix.lower() in target_suffixes:
             return output
-        return output / source.with_suffix(suffix).name
+        return output / target_name
 
     relative = source.relative_to(input_root)
-    return (output / relative).with_suffix(suffix)
+    return output / relative.parent / target_name
 
 
 def build_jobs(
@@ -139,13 +140,6 @@ def build_jobs(
     raise ConversionError(f"Input path does not exist: {input_path}")
 
 
-def _write_html_for_debug(job: ConvertJob, html: str) -> None:
-    if not job.html_output:
-        return
-    job.html_output.parent.mkdir(parents=True, exist_ok=True)
-    job.html_output.write_text(html, encoding="utf-8")
-
-
 def _render_job(page, job: ConvertJob, options: ConvertOptions, temp_dir: Path) -> None:
     markdown_text = read_text_safely(job.source)
     html_document = build_html(
@@ -165,7 +159,9 @@ def _render_job(page, job: ConvertJob, options: ConvertOptions, temp_dir: Path) 
         ),
     )
 
-    _write_html_for_debug(job, html_document.html)
+    if job.html_output:
+        job.html_output.parent.mkdir(parents=True, exist_ok=True)
+        job.html_output.write_text(html_document.html, encoding="utf-8")
 
     temp_html = temp_dir / f"{job.source.stem}.html"
     temp_html.write_text(html_document.html, encoding="utf-8")
