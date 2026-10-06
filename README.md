@@ -62,13 +62,7 @@ pip install -e .
 %LOCALAPPDATA%\ms-playwright
 ```
 
-نمونه:
-
-```powershell
-.\scripts\copy-existing-playwright-browsers.ps1
-```
-
-یا دستی:
+نمونه با دستور PowerShell:
 
 ```powershell
 New-Item -ItemType Directory -Force .\browsers
@@ -345,6 +339,27 @@ dist\fa-md-pdf-gui.exe     # رابط گرافیکی
 ```
 
 برای اجرای آفلاین، فولدرهای `browsers/`، `fonts/` و `vendor/` را کنار فایل exe قرار دهید.
+
+## رابط کاربری مدرن دسکتاپ (Tauri 2 + React)
+
+علاوه بر رابط گرافیکی کلاسیک Tkinter، نسخه مدرن میزکار بر پایه **Tauri 2**، **React 19**، **TypeScript**، **Tailwind CSS v4** و **Vazirmatn** در پوشه `desktop-tauri/` توسعه داده شده است:
+- **میزکار ۳ بخشی:** صف فایل‌ها با Drag & Drop، پنل تنظیمات ۵ تب با تطابق ۱۰۰٪ تمام ۳۲ پارامتر، و پیش‌نمایش سند / کنسول استریم بلادرنگ.
+- **تم تیره و روشن استاندارد:** طراحی شیک، مینیمال و بهینه‌سازی‌شده برای دسکتاپ.
+- **تست خودکار:** تست‌های یکپارچگی ترجمه آرگومان‌های خط فرمان.
+
+### اجرای نسخه توسعه:
+```powershell
+cd desktop-tauri
+npm install
+npm run dev
+```
+
+### بیلد نهایی و تست واحد:
+```powershell
+cd desktop-tauri
+npm test
+npm run build
+```
 
 ## ساختار پروژه
 
