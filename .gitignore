@@ -13,3 +13,9 @@ build/
 browsers/
 browsers
 .superpowers/
+docx-output/
+output/
+*.log
+desktop-tauri/node_modules/
+desktop-tauri/dist/
+
