@@ -36,6 +36,15 @@ DEFAULT_DOCX_FONT_FALLBACK = "Tahoma"
 DEFAULT_DOCX_CODE_FONT = "Consolas"
 DEFAULT_DOCX_EMOJI_FONT = "Segoe UI Emoji"
 
+XML_ILLEGAL_CHARS_RE = re.compile(
+    r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f\ud800-\udfff\ufffe\uffff]"
+)
+
+
+def _clean_xml_text(text: str) -> str:
+    """Remove control characters, surrogates, and noncharacters invalid in XML 1.0."""
+    return XML_ILLEGAL_CHARS_RE.sub("", text) if text else ""
+
 HEADING_SIZES = {1: 22, 2: 18, 3: 15, 4: 13, 5: 12, 6: 11}
 
 PAGE_FORMAT_DIMENSIONS: dict[str, tuple[float, float]] = {
@@ -284,7 +293,7 @@ def _apply_run_formatting(run, style: RunStyle) -> None:
 
 def _add_single_run(paragraph: "Paragraph", text: str, style: RunStyle):
     """Add a single formatted run to a paragraph."""
-    run = paragraph.add_run(text)
+    run = paragraph.add_run(_clean_xml_text(text))
     f_name = style.font_name
     cs_font = None if style.code else f_name
     _set_run_font(run, f_name, complex_script_font=cs_font)
@@ -347,7 +356,7 @@ def _create_hyperlink_piece(hyperlink, paragraph: "Paragraph", text: str, style:
     run_xml = parse_xml(r'<w:r xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"/>')
     hyperlink.append(run_xml)
     run = Run(run_xml, paragraph)
-    run.text = text
+    run.text = _clean_xml_text(text)
     cs_font = style.font_name if not style.rtl else None
     _set_run_font(run, style.font_name, complex_script_font=cs_font)
     _apply_run_formatting(run, style)
@@ -918,8 +927,10 @@ def _add_blockquote(
 
     cfg = CALLOUT_CONFIGS.get(callout_type) if callout_type else None
 
-    for idx, inline in enumerate(inline_tokens):
-        if cfg and idx == 0 and not any(t.content.strip() for t in inline if t.type == "text"):
+    title_rendered = False
+    for inline in inline_tokens:
+        has_text = any(t.content.strip() for t in inline if t.type == "text")
+        if cfg and not title_rendered and not has_text:
             # If the first line was only the [!NOTE] tag and is now empty, skip creating an empty line
             continue
 
@@ -944,9 +955,9 @@ def _add_blockquote(
             pBdr.append(border)
             pPr.append(pBdr)
 
-            if idx == 0:
+            if not title_rendered:
                 raw_title = cfg["title_plain"] if options.strip_emojis else cfg["title"]
-                suffix = " " if any(t.content.strip() for t in inline if t.type == "text") else ""
+                suffix = " " if has_text else ""
                 _add_styled_run(
                     paragraph,
                     raw_title + suffix,
@@ -956,6 +967,7 @@ def _add_blockquote(
                     color=cfg["color"],
                     rtl=options.rtl,
                 )
+                title_rendered = True
 
         _render_inline_tokens(
             paragraph,
@@ -968,6 +980,37 @@ def _add_blockquote(
             for run in paragraph.runs:
                 run.italic = True
                 run.font.color.rgb = RGBColor(0x4B, 0x55, 0x63)
+
+    if cfg and not title_rendered:
+        # Standalone callout tag with no following text
+        paragraph = document.add_paragraph()
+        if options.rtl:
+            _set_paragraph_rtl(paragraph)
+        paragraph.paragraph_format.left_indent = Inches(0.3)
+        paragraph.paragraph_format.right_indent = Inches(0.3)
+        pPr = paragraph._p.get_or_add_pPr()
+        shd = pPr.makeelement(
+            qn("w:shd"),
+            {qn("w:val"): "clear", qn("w:color"): "auto", qn("w:fill"): cfg["bg"]},
+        )
+        pPr.append(shd)
+        pBdr = pPr.makeelement(qn("w:pBdr"), {})
+        border = pPr.makeelement(
+            qn("w:right" if options.rtl else "w:left"),
+            {qn("w:val"): "single", qn("w:sz"): "24", qn("w:space"): "8", qn("w:color"): cfg["hex"]},
+        )
+        pBdr.append(border)
+        pPr.append(pBdr)
+        raw_title = cfg["title_plain"] if options.strip_emojis else cfg["title"]
+        _add_styled_run(
+            paragraph,
+            raw_title,
+            font_name=options.font_family,
+            font_size_pt=options.font_size_pt,
+            bold=True,
+            color=cfg["color"],
+            rtl=options.rtl,
+        )
 
 
 def _add_list_item(
@@ -1130,6 +1173,9 @@ def _add_table_from_tokens(
         return i
 
     cols = max(len(row) for row in rows)
+    if cols == 0:
+        return i
+
     table = document.add_table(rows=len(rows), cols=cols)
     table.style = "Light Grid Accent 1"
 

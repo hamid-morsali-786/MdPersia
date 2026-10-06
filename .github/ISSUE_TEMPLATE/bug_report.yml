@@ -1,0 +1,72 @@
+name: 🐛 Bug Report
+description: Report a bug, rendering issue, or unexpected behavior in MdPersia
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting an issue! Please check if the issue has already been reported before submitting.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: A clear and concise description of what the bug is.
+      placeholder: When converting a Markdown file with mixed Persian/English text, punctuation flips incorrectly...
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce & Markdown Snippet
+      description: Provide the exact Markdown sample and command used.
+      placeholder: |
+        1. Run `mdpersia sample.md -o output.docx`
+        2. Sample Markdown content:
+        ```markdown
+        # تیتر تست
+        این یک متن با کلمه English و کد `var x = 1` است.
+        ```
+    validations:
+      required: true
+
+  - type: dropdown
+    id: format
+    attributes:
+      label: Output Format
+      options:
+        - PDF
+        - DOCX (Word)
+        - Both
+        - GUI / CLI execution issue
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating System
+      options:
+        - Windows 11
+        - Windows 10
+        - Linux (Ubuntu / Debian / Fedora)
+        - macOS
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: MdPersia Version / Python Version
+      placeholder: MdPersia 0.2.0, Python 3.11.8
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant Log Output or Screenshots
+      description: Paste any command output, error tracebacks, or screenshots here.
+      render: shell

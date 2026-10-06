@@ -3,28 +3,45 @@ requires = ["setuptools>=69", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "fa-md-pdf"
+name = "mdpersia"
 version = "0.2.0"
-description = "A Windows-friendly CLI to convert Persian/RTL Markdown files with Mermaid diagrams to PDF."
+description = "The modern, offline-first Persian and RTL Markdown to Word (DOCX) & PDF converter with native Mermaid support."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [
-  { name = "Your Team" }
+  { name = "Hamid Morsali" }
 ]
-keywords = ["markdown", "pdf", "persian", "rtl", "mermaid", "playwright", "documentation"]
+keywords = [
+  "markdown",
+  "pdf",
+  "docx",
+  "word",
+  "persian",
+  "rtl",
+  "mermaid",
+  "playwright",
+  "documentation",
+  "converter",
+  "mdpersia"
+]
 classifiers = [
-  "Development Status :: 3 - Alpha",
+  "Development Status :: 4 - Beta",
   "Environment :: Console",
+  "Environment :: Win32 (MS Windows)",
   "Intended Audience :: Developers",
+  "Intended Audience :: End Users/Desktop",
   "License :: OSI Approved :: MIT License",
   "Operating System :: Microsoft :: Windows",
+  "Operating System :: POSIX :: Linux",
+  "Operating System :: MacOS",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
   "Topic :: Documentation",
-  "Topic :: Text Processing :: Markup :: Markdown"
+  "Topic :: Text Processing :: Markup :: Markdown",
+  "Topic :: Printing"
 ]
 dependencies = [
   "markdown-it-py>=4.2,<5",
@@ -35,17 +52,27 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-  "pytest>=8,<9"
+  "pytest>=8,<9",
+  "ruff>=0.4"
 ]
 
 [project.scripts]
+mdpersia = "fa_md_pdf.cli:main"
 fa-md-pdf = "fa_md_pdf.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/hamid-morsali-786/MdPersia"
+Documentation = "https://github.com/hamid-morsali-786/MdPersia#readme"
+Repository = "https://github.com/hamid-morsali-786/MdPersia.git"
+"Bug Tracker" = "https://github.com/hamid-morsali-786/MdPersia/issues"
+Changelog = "https://github.com/hamid-morsali-786/MdPersia/blob/main/CHANGELOG.md"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
 fa_md_pdf = ["assets/*.css"]
+mdpersia = ["assets/*.css"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

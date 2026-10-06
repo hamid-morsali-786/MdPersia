@@ -28,10 +28,10 @@ DEFAULT_FONT_FAMILY = '"Vazirmatn", "Noto Naskh Arabic", "Segoe UI", Tahoma, Ari
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="fa-md-pdf",
+        prog="mdpersia",
         description=(
-            "Convert Persian/RTL Markdown files with Mermaid diagrams to PDF. "
-            "Offline defaults are loaded from ./browsers, ./fonts and ./vendor/mermaid.min.js."
+            "MdPersia: Modern, offline-first Persian and RTL Markdown to PDF and Word (DOCX) converter "
+            "with Mermaid support. Offline defaults loaded from ./browsers, ./fonts and ./vendor/mermaid.min.js."
         ),
     )
 
@@ -307,6 +307,7 @@ def resolve_browsers_setting(args: argparse.Namespace, project_root: Path) -> Pa
 
 def _run_wrap_rtl(args: argparse.Namespace) -> int:
     """Transform Markdown files by wrapping Persian text in <div dir='rtl'>."""
+    from .html_builder import read_text_safely
     from .rtl_wrapper import WrapOptions, wrap_rtl_in_markdown
 
     input_path = args.input.resolve()
@@ -345,7 +346,7 @@ def _run_wrap_rtl(args: argparse.Namespace) -> int:
 
     for source in sources:
         try:
-            text = source.read_text(encoding="utf-8-sig")
+            text = read_text_safely(source)
             transformed = wrap_rtl_in_markdown(text, options)
             destination = _resolve_wrap_rtl_output(source, output, input_root, suffix)
             destination.parent.mkdir(parents=True, exist_ok=True)
@@ -388,7 +389,7 @@ def _run_wrap_rtl(args: argparse.Namespace) -> int:
                     print(f"\n[fa-md-pdf] Detected changes in {len(changed)} file(s). Re-transforming...")
                     for s in changed:
                         try:
-                            txt = s.read_text(encoding="utf-8-sig")
+                            txt = read_text_safely(s)
                             tf = wrap_rtl_in_markdown(txt, options)
                             dest = _resolve_wrap_rtl_output(s, output, input_root, suffix)
                             dest.parent.mkdir(parents=True, exist_ok=True)

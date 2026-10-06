@@ -122,8 +122,10 @@ def render_mermaid_to_png(
                         continue
 
                     error = page.evaluate("() => window.__ERROR || null")
-                    if error and not ignore_errors:
-                        raise RuntimeError(f"Mermaid render error: {error}")
+                    if error:
+                        if not ignore_errors:
+                            raise RuntimeError(f"Mermaid render error: {error}")
+                        continue
 
                     # Locate the rendered diagram container
                     mermaid_el = page.query_selector(".mermaid")

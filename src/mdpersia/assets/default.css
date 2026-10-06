@@ -1,0 +1,229 @@
+:root {
+  color-scheme: light;
+}
+
+html {
+  direction: rtl;
+}
+
+body {
+  direction: rtl;
+  text-align: right;
+  font-family: "Vazirmatn", "Noto Naskh Arabic", "Segoe UI", Tahoma, Arial, sans-serif;
+  font-size: 12pt;
+  line-height: 1.8;
+  color: #1f2937;
+  background: #ffffff;
+  margin: 0;
+}
+
+.markdown-body {
+  max-width: 100%;
+}
+
+p,
+li,
+blockquote,
+td,
+th,
+figcaption {
+  unicode-bidi: plaintext;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  color: #111827;
+  line-height: 1.45;
+  margin-top: 1.6em;
+  margin-bottom: 0.65em;
+  break-after: avoid;
+}
+
+h1 {
+  font-size: 24pt;
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 0.25em;
+}
+
+h2 {
+  font-size: 18pt;
+}
+
+h3 {
+  font-size: 15pt;
+}
+
+p {
+  margin: 0.65em 0;
+}
+
+a {
+  color: #075985;
+  text-decoration: none;
+}
+
+blockquote {
+  border-right: 4px solid #d1d5db;
+  margin: 1em 0;
+  padding: 0.3em 1em;
+  color: #4b5563;
+  background: #f9fafb;
+}
+
+ul,
+ol {
+  padding-right: 1.6em;
+  padding-left: 0;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1em 0;
+  break-inside: auto;
+}
+
+thead {
+  display: table-header-group;
+}
+
+tr {
+  break-inside: avoid;
+}
+
+th,
+td {
+  border: 1px solid #d1d5db;
+  padding: 0.45em 0.6em;
+  vertical-align: top;
+}
+
+th {
+  background: #f3f4f6;
+  font-weight: 700;
+}
+
+img,
+svg {
+  max-width: 100%;
+  height: auto;
+}
+
+pre,
+code,
+kbd,
+samp {
+  direction: ltr;
+  text-align: left;
+  font-family: Consolas, "Cascadia Mono", "Courier New", monospace;
+}
+
+code {
+  background: #f3f4f6;
+  border-radius: 4px;
+  padding: 0.08em 0.25em;
+  font-size: 0.9em;
+}
+
+pre {
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 0.9em;
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
+  margin: 1em 0;
+}
+
+pre code {
+  background: transparent;
+  padding: 0;
+}
+
+.mermaid {
+  direction: ltr;
+  text-align: center;
+  margin: 1.2em auto;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+.mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
+
+hr {
+  border: none;
+  border-top: 1px solid #e5e7eb;
+  margin: 2em 0;
+}
+
+@media print {
+  body {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  a {
+    color: inherit;
+  }
+}
+
+/* Page Break */
+.page-break, hr.page-break {
+  page-break-after: always;
+  break-after: page;
+}
+
+/* Callout / Admonitions */
+blockquote.callout {
+  border-right-width: 4px;
+  border-radius: 6px;
+  padding: 0.8em 1.2em;
+  margin: 1.2em 0;
+  color: #1f2937;
+}
+.callout-title {
+  font-weight: 700;
+  margin-bottom: 0.4em;
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+}
+blockquote.callout-note {
+  border-right-color: #2563eb;
+  background: #eff6ff;
+}
+blockquote.callout-tip {
+  border-right-color: #16a34a;
+  background: #f0fdf4;
+}
+blockquote.callout-important {
+  border-right-color: #7c3aed;
+  background: #f5f3ff;
+}
+blockquote.callout-warning {
+  border-right-color: #d97706;
+  background: #fffbeb;
+}
+blockquote.callout-caution {
+  border-right-color: #dc2626;
+  background: #fef2f2;
+}
+
+/* Pygments Syntax Highlighting */
+pre code .k, pre code .kd, pre code .kn, pre code .kr { color: #007020; font-weight: bold; } /* Keywords */
+pre code .kt { color: #902000; font-weight: bold; } /* Type */
+pre code .s, pre code .s1, pre code .s2, pre code .sb, pre code .sc, pre code .sd { color: #ba2121; } /* Strings */
+pre code .c, pre code .c1, pre code .cm, pre code .cs, pre code .ch { color: #60a0b0; font-style: italic; } /* Comments */
+pre code .m, pre code .mi, pre code .mf, pre code .mh, pre code .mo { color: #208050; } /* Numbers */
+pre code .nf, pre code .fm { color: #06287e; font-weight: bold; } /* Functions */
+pre code .nc, pre code .nn { color: #0e84b5; font-weight: bold; } /* Classes / Namespaces */
+pre code .o, pre code .ow { color: #555555; } /* Operators */
+pre code .nb, pre code .bp { color: #007020; } /* Builtins */
+pre code .na, pre code .nv, pre code .vi, pre code .vg { color: #19177c; } /* Attributes / Variables */

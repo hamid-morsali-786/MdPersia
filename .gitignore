@@ -16,8 +16,11 @@ browsers
 docx-output/
 output/
 *.log
+**/debug.log
 desktop-tauri/node_modules/
 desktop-tauri/dist/
 *.docx
 *.rtl.md
+.archify/
+.kiro/
 

@@ -237,26 +237,34 @@ def _render_job_docx(job: ConvertJob, options: ConvertOptions) -> None:
     # Pick a clean DOCX font name (single family, no CSS list)
     docx_font = _pick_docx_font_family(options.font_family)
 
-    build_docx(
-        markdown_text,
-        DocxBuildOptions(
-            source_path=job.source,
-            font_family=docx_font,
-            font_size_pt=options.docx_font_size_pt,
-            rtl=True,
-            mermaid_images=mermaid_images or None,
-            image_scale=options.docx_image_scale,
-            image_min_width_inches=options.docx_image_min_width,
-            image_max_width_inches=options.docx_image_max_width,
-            include_page_numbers=options.include_page_numbers,
-            highlight_code=options.highlight_code,
-            page_format=options.page_format,
-            margin=options.margin,
-            landscape=options.landscape,
-            strip_emojis=options.strip_emojis,
-        ),
-        job.output,
-    )
+    try:
+        build_docx(
+            markdown_text,
+            DocxBuildOptions(
+                source_path=job.source,
+                font_family=docx_font,
+                font_size_pt=options.docx_font_size_pt,
+                rtl=True,
+                mermaid_images=mermaid_images or None,
+                image_scale=options.docx_image_scale,
+                image_min_width_inches=options.docx_image_min_width,
+                image_max_width_inches=options.docx_image_max_width,
+                include_page_numbers=options.include_page_numbers,
+                highlight_code=options.highlight_code,
+                page_format=options.page_format,
+                margin=options.margin,
+                landscape=options.landscape,
+                strip_emojis=options.strip_emojis,
+            ),
+            job.output,
+        )
+    finally:
+        if mermaid_images:
+            import shutil
+
+            first_path = next(iter(mermaid_images.values()), None)
+            if first_path and first_path.parent.is_dir():
+                shutil.rmtree(first_path.parent, ignore_errors=True)
 
 
 def _pick_docx_font_family(css_font_family: str) -> str:

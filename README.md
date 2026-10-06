@@ -1,459 +1,241 @@
-<div dir="rtl">
+<p align="center">
+  <h1 align="center">MdPersia</h1>
+  <p align="center">
+    <strong>The Modern, Offline-First Persian & RTL Markdown to Word (DOCX) and PDF Converter</strong><br />
+    Native Mermaid Diagrams &bull; Flawless BiDi Formatting &bull; High-Fidelity Word Styling &bull; CLI &amp; GUI
+  </p>
+</p>
 
-# fa-md-pdf
+<p align="center">
+  <a href="https://github.com/hamid-morsali-786/MdPersia/actions/workflows/ci.yml">
+    <img src="https://github.com/hamid-morsali-786/MdPersia/actions/workflows/ci.yml/badge.svg" alt="CI Status" />
+  </a>
+  <a href="https://pypi.org/project/mdpersia/">
+    <img src="https://img.shields.io/pypi/v/mdpersia.svg?color=blue" alt="PyPI Version" />
+  </a>
+  <a href="https://www.python.org/">
+    <img src="https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-3776AB.svg?logo=python&logoColor=white" alt="Python Versions" />
+  </a>
+  <a href="LICENSE">
+    <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License" />
+  </a>
+  <a href="https://github.com/astral-sh/ruff">
+    <img src="https://img.shields.io/badge/code%20style-ruff-000000.svg" alt="Code Style: Ruff" />
+  </a>
+  <a href="README_FA.md">
+    <img src="https://img.shields.io/badge/مستندات-فارسی-orange.svg" alt="Persian Docs" />
+  </a>
+</p>
 
-ابزار پایتونی برای تبدیل فایل‌های Markdown فارسی/راست‌به‌چپ به **PDF** یا **DOCX (Word)**، با پشتیبانی از نمودارهای Mermaid، رابط گرافیکی (GUI) و حالت کاملاً **آفلاین**.
+<p align="center">
+  <a href="#why-mdpersia">Why MdPersia</a> &bull;
+  <a href="#features">Key Features</a> &bull;
+  <a href="#comparison">Comparison Matrix</a> &bull;
+  <a href="#quickstart">Quickstart</a> &bull;
+  <a href="#cli-usage">CLI Usage</a> &bull;
+  <a href="#python-api">Python API</a> &bull;
+  <a href="#architecture">Architecture</a> &bull;
+  <a href="#contributing">Contributing</a>
+</p>
 
-نسخه فعلی **offline-first** است. اگر پروژه ساختار زیر را داشته باشد، دستور ساده زیر بدون نیاز به اینترنت کار می‌کند:
+---
 
-```powershell
-fa-md-pdf .\docs
+## Why MdPersia?
+
+Converting technical Markdown files containing **Persian / Arabic (RTL)** text into publishable documents has historically been frustrating:
+
+- ❌ **Flipped Punctuation & Mixed Text**: English terms, version numbers, brackets `()` and code blocks within Persian text frequently flip direction in traditional PDF generators.
+- ❌ **Broken Word (DOCX) Tables & Layouts**: Generic converters produce left-to-right Word files where text clings to the wrong side and tables lose alignment.
+- ❌ **Failed Mermaid Rendering**: System architecture diagrams, flowcharts, and sequence diagrams rarely render without external internet connections or complex LaTeX toolchains.
+
+**MdPersia** solves this definitively. It provides a rock-solid, offline-first pipeline that renders Markdown files with accurate BiDi text direction, beautiful Persian typography (Vazirmatn), crystal-clear Mermaid diagrams, and exports them directly to both **vector PDF** and **native Microsoft Word (DOCX)**.
+
+---
+
+## Features
+
+- 📑 **Dual Native Outputs**: Generate publication-grade **PDFs** via headless Chromium, or fully editable, RTL-configured **Word (.docx)** files.
+- 📐 **First-Class Mermaid Support**: Flowcharts, Sequence Diagrams, Gantt charts, and Class diagrams are automatically rendered and embedded.
+- 🔒 **100% Offline-First**: Zero runtime calls to external CDNs. Bundles local Chromium support, embedded Vazirmatn fonts, and local Mermaid JavaScript.
+- 🔄 **Real-Time Watch Mode (`-w` / `--watch`)**: Automatically re-compiles documents on file save.
+- 📦 **Batch Directory Conversion**: Converts entire documentation folders while preserving hierarchical directory structures.
+- 🪄 **Intelligent Markdown Repair (`--wrap-rtl`)**: Automatically wraps Persian paragraphs with `<div dir="rtl">` without touching code blocks or existing markup.
+- 🖥️ **Both CLI and Modern GUI**: Seamless command-line interface for CI/CD and scripts, plus a clean graphical interface (Tkinter and Tauri).
+
+---
+
+## Comparison Matrix
+
+| Feature | MdPersia | Pandoc + XeLaTeX | VS Code Markdown-PDF | Typora Export |
+| :--- | :---: | :---: | :---: | :---: |
+| **Persian / RTL Accuracy** | **Flawless (Native)** | Complex Config | Inconsistent | Good |
+| **Native Word (.docx) RTL** | **Yes (Full RTL)** | Basic / LTR Defaults | No | Basic |
+| **Offline Mermaid Diagrams** | **Built-in** | Requires Filters | Requires Internet | Partial |
+| **Zero External Setup** | **Yes (Standalone)** | Requires >4GB TeXLive | Requires Extension | Closed Source |
+| **Batch Folder Processing** | **Yes** | Manual Scripting | Manual | No |
+| **Live Watch Daemon** | **Yes (`-w`)** | No | No | No |
+| **Graphical User Interface** | **Yes (GUI included)** | No | Editor GUI | Editor GUI |
+
+---
+
+## Installation
+
+### Via pip
+
+```bash
+pip install mdpersia
 ```
 
-```text
-fa-md-pdf-project/
-  browsers/
-    chromium-1217/
-    chromium_headless_shell-1217/
-    ffmpeg-1011/
-    winldd-1007/
-  fonts/
-    Vazirmatn-Regular.ttf
-    Vazirmatn-Bold.ttf
-    ...
-  vendor/
-    mermaid.min.js
-  docs/
+### From Source (Development)
+
+```bash
+git clone https://github.com/hamid-morsali-786/MdPersia.git
+cd MdPersia
+
+# Create and activate virtual environment
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .\.venv\Scripts\Activate.ps1
+
+# Install in editable mode with dev dependencies
+pip install -e ".[dev]"
 ```
 
-## قابلیت‌ها
+### Headless Browser Setup (One-time)
 
-- تبدیل یک فایل Markdown به PDF یا DOCX
-- تبدیل دسته‌ای همه فایل‌های یک فولدر
-- پشتیبانی از `.md` و `.markdown`
-- پشتیبانی از زیرپوشه‌ها به‌صورت پیش‌فرض
-- پشتیبانی از فارسی و راست‌به‌چپ از طریق CSS و تنظیمات RTL در Word
-- رندر نمودارهای Mermaid داخل PDF و DOCX (به‌صورت تصویر PNG)
-- استفاده خودکار از `vendor/mermaid.min.js`
-- استفاده خودکار از فونت‌های `fonts/Vazirmatn-*.ttf`
-- استفاده خودکار از Chromium موجود در `browsers/`
-- خروجی کنار فایل اصلی یا در فولدر خروجی جداگانه
-- امکان تنظیم فونت، margin، اندازه صفحه، landscape و CSS سفارشی
-- امکان نگه‌داشتن HTML میانی برای عیب‌یابی
-- **رابط گرافیکی (GUI)** فارسی و راست‌به‌چپ با `tkinter`
-- **حالت بسته‌بندی Markdown با `<div dir="rtl">`** برای اصلاح فایل‌های موجود (`--wrap-rtl`)
-- خروجی exe مستقل برای ویندوز (CLI و GUI)
-
-## نصب سریع در ویندوز
-
-در PowerShell از داخل فولدر پروژه:
-
-```powershell
-py -m venv .venv
-.\.venv\Scripts\Activate.ps1
-
-python -m pip install --upgrade pip
-pip install -e .
-```
-
-اگر از قبل Chromium مخصوص Playwright را دانلود کرده‌اید، کل محتویات مسیر زیر را داخل `browsers` پروژه کپی کنید:
-
-```text
-%LOCALAPPDATA%\ms-playwright
-```
-
-نمونه با دستور PowerShell:
-
-```powershell
-New-Item -ItemType Directory -Force .\browsers
-Copy-Item "$env:LOCALAPPDATA\ms-playwright\*" ".\browsers\" -Recurse -Force
-```
-
-اگر Chromium را هنوز دانلود نکرده‌اید و اینترنت دارید:
-
-```powershell
-$env:PLAYWRIGHT_BROWSERS_PATH = "$PWD\browsers"
+If you have an internet connection during setup:
+```bash
 python -m playwright install chromium
 ```
 
-بعد از این مرحله، اجرای تبدیل دیگر برای Chromium به اینترنت نیاز ندارد.
+> **Offline Portable Mode:** Place your Chromium binaries in `./browsers/`, fonts in `./fonts/`, and `mermaid.min.js` in `./vendor/`. MdPersia will automatically detect them without needing any system installations!
 
-## آماده‌سازی Mermaid و فونت
+---
 
-فایل Mermaid را اینجا بگذارید:
+## Quickstart
 
-```text
-vendor\mermaid.min.js
+### 1. Convert a single file to PDF
+```bash
+mdpersia ./docs/sample.md
+```
+*Creates `./docs/sample.pdf`.*
+
+### 2. Convert to Microsoft Word (DOCX)
+```bash
+mdpersia ./docs/sample.md -f docx
+```
+*Creates `./docs/sample.docx` with right-to-left layout and styled tables.*
+
+### 3. Convert an entire folder with custom output directory
+```bash
+mdpersia ./docs -o ./dist -f pdf
 ```
 
-فونت‌های فارسی را اینجا بگذارید:
-
-```text
-fonts\Vazirmatn-Regular.ttf
-fonts\Vazirmatn-Bold.ttf
-fonts\Vazirmatn-Medium.ttf
-...
+### 4. Watch for changes in real time
+```bash
+mdpersia ./docs/specification.md -w -f pdf
 ```
 
-برنامه به‌صورت خودکار فایل‌های زیر را تشخیص می‌دهد:
-
-```text
-vendor\mermaid.min.js
-fonts\Vazirmatn-*.ttf
-browsers\
+### 5. Launch the Graphical User Interface
+```bash
+mdpersia --gui
 ```
 
-## رابط گرافیکی (GUI)
+---
 
-برای کاربرانی که خط فرمان را ترجیح نمی‌دهند، یک رابط گرافیکی فارسی/RTL با `tkinter` فراهم شده است:
-
-```powershell
-fa-md-pdf-gui
-```
-
-یا از طریق CLI:
-
-```powershell
-fa-md-pdf --gui
-```
-
-پنجره GUI شامل بخش‌های زیر است:
-- انتخاب فایل/فولدر ورودی و فولدر خروجی
-- انتخاب فرمت خروجی (PDF، DOCX، یا فقط بسته‌بندی RTL در Markdown)
-- تب‌های تنظیمات: **صفحه** (فرمت/حاشیه/جهت)، **فونت**، **Mermaid** (فایل/تم/timeout)، **DOCX** (کیفیت تصویر، اندازه فونت)، **پیشرفته** (پسوندها، CSS سفارشی، مرورگرها)
-- لاگ پیشرفت رنگی و دکمه انصراف
-
-GUI همان موتور تبدیل CLI را استفاده می‌کند و مسیرهای آفلاین (`browsers/`، `vendor/mermaid.min.js`، `fonts/`) را خودکار شناسایی می‌کند.
-
-## تبدیل یک فایل
-
-```powershell
-fa-md-pdf .\examples\sample-fa.md
-```
-
-خروجی کنار فایل اصلی ساخته می‌شود:
-
-```text
-examples\sample-fa.pdf
-```
-
-## تبدیل همه فایل‌های یک فولدر
-
-```powershell
-fa-md-pdf .\docs
-```
-
-به‌صورت پیش‌فرض، همه فایل‌های `.md` و `.markdown` داخل فولدر و زیرپوشه‌ها تبدیل می‌شوند.
-
-## ذخیره خروجی‌ها در فولدر جدا
-
-```powershell
-fa-md-pdf .\docs -o .\pdf-output
-```
-
-اگر ورودی فولدر باشد، ساختار زیرپوشه‌ها در خروجی حفظ می‌شود.
-
-## خروجی DOCX (Word)
-
-برای تولید فایل Word به‌جای PDF از `-f docx` استفاده کنید:
-
-```powershell
-fa-md-pdf .\docs -f docx -o .\docx-output
-```
-
-ویژگی‌های خروجی DOCX:
-- جهت RTL برای کل سند، شامل پاراگراف‌ها و عنوان‌ها
-- نمودارهای Mermaid به‌صورت تصویر PNG با کیفیت بالا داخل سند جای می‌گیرند
-- فونت پیش‌فرض از `--font-family` انتخاب می‌شود (تنها اولین خانواده مورد استفاده قرار می‌گیرد)
-
-تنظیمات اختصاصی DOCX:
-
-```powershell
-fa-md-pdf .\docs -f docx `
-  --docx-image-scale 3 `
-  --docx-image-min-width 4.0 `
-  --docx-image-max-width 6.5 `
-  --docx-font-size 12
-```
-
-| گزینه | توضیح | پیش‌فرض |
-|---|---|---|
-| `--docx-image-scale` | ضریب کیفیت تصویر Mermaid (۱ تا ۴) | `3` |
-| `--docx-image-min-width` | حداقل عرض تصویر (اینچ) | `4.0` |
-| `--docx-image-max-width` | حداکثر عرض تصویر (اینچ) | `6.5` |
-| `--docx-font-size` | اندازه فونت متن (پوینت) | `12` |
-
-## تبدیل فقط فایل‌های مستقیم داخل فولدر
-
-```powershell
-fa-md-pdf .\docs --no-recursive
-```
-
-## مشاهده مسیرهای تشخیص داده‌شده
-
-برای اطمینان از اینکه برنامه از مسیرهای آفلاین استفاده می‌کند:
-
-```powershell
-fa-md-pdf .\docs --verbose
-```
-
-خروجی باید شبیه این باشد:
-
-```text
-[fa-md-pdf] project root: E:\project\fa-md-pdf-project
-[fa-md-pdf] format:       pdf
-[fa-md-pdf] mermaid js:   E:\project\fa-md-pdf-project\vendor\mermaid.min.js
-[fa-md-pdf] font dir:     E:\project\fa-md-pdf-project\fonts
-[fa-md-pdf] browsers:     E:\project\fa-md-pdf-project\browsers
-```
-
-## گزینه‌های override
-
-اگر خواستید مسیرها را دستی بدهید:
-
-```powershell
-fa-md-pdf .\docs `
-  --browsers-path .\browsers `
-  --mermaid-js .\vendor\mermaid.min.js `
-  --font-dir .\fonts
-```
-
-اگر فقط یک فایل فونت دارید:
-
-```powershell
-fa-md-pdf .\docs --font-file .\fonts\Vazirmatn-Regular.ttf
-```
-
-اگر عمداً می‌خواهید Mermaid را از URL بگیرید:
-
-```powershell
-fa-md-pdf .\docs --mermaid-url "https://cdn.jsdelivr.net/npm/mermaid@11.15.0/dist/mermaid.min.js"
-```
-
-این گزینه برای اجرای کاملاً آفلاین توصیه نمی‌شود.
-
-## گزینه‌های Mermaid
-
-```powershell
-fa-md-pdf .\docs --mermaid-theme neutral --mermaid-timeout 45000
-```
-
-| گزینه | توضیح | پیش‌فرض |
-|---|---|---|
-| `--mermaid-theme` | یکی از `default`, `base`, `dark`, `forest`, `neutral`, `null` | `default` |
-| `--mermaid-timeout` | timeout رندر هر دیاگرام (میلی‌ثانیه) | `30000` |
-| `--ignore-mermaid-errors` | ادامه تبدیل حتی در صورت خطای Mermaid | غیر فعال |
-
-## گزینه‌های کاربردی
-
-```powershell
-fa-md-pdf .\docs --keep-html
-```
-
-HTML میانی را کنار PDF نگه می‌دارد.
-
-```powershell
-fa-md-pdf .\docs --page-format A4 --margin 14mm
-```
-
-اندازه صفحه و حاشیه را تنظیم می‌کند.
-
-```powershell
-fa-md-pdf .\docs --landscape
-```
-
-خروجی افقی می‌سازد.
-
-```powershell
-fa-md-pdf .\docs --fail-fast
-```
-
-در تبدیل دسته‌ای، با اولین خطا متوقف می‌شود.
-
-## بسته‌بندی Markdown با `<div dir="rtl">`
-
-برای اصلاح فایل‌های Markdown موجود (مثلاً برای نمایش درست در GitHub یا VSCode) و افزودن خودکار `<div dir="rtl">...</div>` به بلوک‌های فارسی:
-
-```powershell
-fa-md-pdf .\docs --wrap-rtl
-```
-
-ویژگی‌ها:
-- بلوک‌های کد و wrapperهای موجود دست‌نخورده باقی می‌مانند
-- ایدمپوتنت است (اجرای دوباره خروجی یکسان می‌دهد)
-- در حالت پیش‌فرض، فایل کنار فایل اصلی با پسوند `.rtl` ذخیره می‌شود (`file.md → file.rtl.md`)
-
-تغییر پسوند:
-
-```powershell
-fa-md-pdf .\docs --wrap-rtl --wrap-rtl-suffix ".out"
-```
-
-برای بازنویسی روی همان فایل:
-
-```powershell
-fa-md-pdf .\docs --wrap-rtl --wrap-rtl-suffix ""
-```
-
-نوشتن خروجی در فولدر جدا (ساختار زیرپوشه‌ها حفظ می‌شود):
-
-```powershell
-fa-md-pdf .\docs --wrap-rtl -o .\docs-rtl
-```
-
-## نمونه Mermaid
-
-````markdown
-# نمونه
+## Architecture
 
 ```mermaid
-flowchart TD
-    A[شروع] --> B{آیا فایل Markdown است؟}
-    B -->|بله| C[تبدیل به HTML]
-    C --> D[رندر Mermaid]
-    D --> E[خروجی PDF]
-```
-````
-
-## ساخت فایل exe مستقل
-
-برای تولید نسخه‌های قابل توزیع `fa-md-pdf.exe` (CLI) و `fa-md-pdf-gui.exe` (GUI):
-
-```powershell
-.\scripts\build-exe.ps1
+flowchart LR
+    A[Markdown File<br/>fa-text.md] --> B{MdPersia Engine}
+    B -->|Parse & RTL Guard| C[Markdown-It-Py AST]
+    C -->|Diagram Extraction| D[Local Mermaid Engine]
+    D --> E[Headless Chromium]
+    E -->|Print to PDF| F[Vector PDF File]
+    C -->|Docx AST Builder| G[Python-docx + RTL XML]
+    D -->|High-Res PNG| G
+    G --> H[Microsoft Word .docx]
 ```
 
-اسکریپت به‌طور خودکار `pyinstaller` را در صورت نیاز نصب می‌کند و دو فایل را تولید می‌کند:
+---
+
+## Python API
+
+You can easily integrate MdPersia into your own Python applications or automation pipelines:
+
+```python
+from pathlib import Path
+from mdpersia import build_jobs, convert_jobs, ConvertOptions
+
+options = ConvertOptions(
+    format="docx",       # "pdf" or "docx"
+    font_family='"Vazirmatn", sans-serif',
+    page_format="A4",
+    margin="15mm"
+)
+
+jobs = build_jobs(
+    input_path=Path("./docs/architecture.md"),
+    options=options
+)
+
+success, failed = convert_jobs(jobs)
+print(f"Completed: {success} succeeded, {failed} failed.")
+```
+
+---
+
+## CLI Options Reference
 
 ```text
-dist\fa-md-pdf.exe         # رابط خط فرمان
-dist\fa-md-pdf-gui.exe     # رابط گرافیکی
+usage: mdpersia [-h] [-o OUTPUT] [-f {pdf,docx}]
+                [--docx-image-scale {1,2,3,4}]
+                [--docx-image-min-width DOCX_IMAGE_MIN_WIDTH]
+                [--docx-image-max-width DOCX_IMAGE_MAX_WIDTH]
+                [--docx-font-size DOCX_FONT_SIZE] [--recursive]
+                [--no-recursive] [--extensions EXTENSIONS [EXTENSIONS ...]]
+                [--font-family FONT_FAMILY] [--font-file FONT_FILE]
+                [--font-dir FONT_DIR] [--css CSS] [--page-format PAGE_FORMAT]
+                [--margin MARGIN] [--landscape] [--strip-emojis]
+                [--mermaid-js MERMAID_JS] [--mermaid-url MERMAID_URL]
+                [--mermaid-theme {default,base,dark,forest,neutral,null}]
+                [--mermaid-timeout MERMAID_TIMEOUT] [--ignore-mermaid-errors]
+                [--browsers-path BROWSERS_PATH] [--keep-html] [--fail-fast]
+                [--verbose] [--version] [--gui] [--wrap-rtl]
+                [--wrap-rtl-suffix WRAP_RTL_SUFFIX] [-w]
+                [input]
 ```
 
-### استفاده از exe
+| Flag | Description | Default |
+| :--- | :--- | :--- |
+| `input` | File or folder containing Markdown files | Current directory |
+| `-o, --output` | Output file path or destination folder | Next to source file |
+| `-f, --format` | Output format: `pdf` or `docx` | `pdf` |
+| `-w, --watch` | Watch file/folder for live auto-conversion | `False` |
+| `--gui` | Launch graphical desktop window | `False` |
+| `--docx-image-scale` | Diagram resolution multiplier for Word (1-4) | `3` |
+| `--page-format` | PDF page size (`A4`, `Letter`, `Legal`) | `A4` |
+| `--margin` | Page margin (e.g., `15mm`, `1in`, `20px`) | `15mm` |
+| `--landscape` | Produce landscape orientation documents | Portrait |
+| `--strip-emojis` | Strip emojis from converted documents | `False` |
+| `--wrap-rtl` | Automatically inject `<div dir="rtl">` tags | `False` |
 
-```powershell
-.\dist\fa-md-pdf.exe .\docs              # تبدیل از CLI
-.\dist\fa-md-pdf.exe --gui               # باز کردن GUI از CLI
-.\dist\fa-md-pdf-gui.exe                 # باز کردن مستقیم GUI
-```
+---
 
-برای اجرای آفلاین، فولدرهای `browsers/`، `fonts/` و `vendor/` را کنار فایل exe قرار دهید.
+## Contributing
 
-## رابط کاربری مدرن دسکتاپ (Tauri 2 + React)
+We welcome contributions from the community!  
+Please see our [Contributing Guide](CONTRIBUTING.md) and [Code of Conduct](CODE_OF_CONDUCT.md) for details on submitting pull requests, reporting issues, or suggesting design improvements.
 
-علاوه بر رابط گرافیکی کلاسیک Tkinter، نسخه مدرن میزکار بر پایه **Tauri 2**، **React 19**، **TypeScript**، **Tailwind CSS v4** و **Vazirmatn** در پوشه `desktop-tauri/` توسعه داده شده است:
-- **میزکار ۳ بخشی:** صف فایل‌ها با Drag & Drop، پنل تنظیمات ۵ تب با تطابق ۱۰۰٪ تمام ۳۲ پارامتر، و پیش‌نمایش سند / کنسول استریم بلادرنگ.
-- **تم تیره و روشن استاندارد:** طراحی شیک، مینیمال و بهینه‌سازی‌شده برای دسکتاپ.
-- **تست خودکار:** تست‌های یکپارچگی ترجمه آرگومان‌های خط فرمان.
+---
 
-### اجرای نسخه توسعه:
-```powershell
-cd desktop-tauri
-npm install
-npm run dev
-```
+## Security
 
-### بیلد نهایی و تست واحد:
-```powershell
-cd desktop-tauri
-npm test
-npm run build
-```
+Please review our [Security Policy](SECURITY.md) to report vulnerabilities responsibly.
 
-## ساختار پروژه
+---
 
-```text
-fa-md-pdf-project/
-  browsers/                       # Chromium مخصوص Playwright، برای اجرای آفلاین
-  fonts/                          # فونت‌های فارسی
-  vendor/mermaid.min.js           # Mermaid آفلاین
-  src/fa_md_pdf/
-    cli.py                        # رابط خط فرمان
-    gui.py                        # رابط گرافیکی tkinter
-    converter.py                  # موتور تبدیل (PDF و DOCX)
-    docx_builder.py               # تولید سند Word با RTL
-    mermaid_renderer.py           # رندر Mermaid به PNG برای DOCX
-    html_builder.py               # تبدیل Markdown به HTML
-    rtl_wrapper.py                # بسته‌بندی Persian با <div dir="rtl">
-    defaults.py                   # تشخیص project root و دارایی‌های آفلاین
-    assets/default.css            # CSS پایه RTL
-  examples/
-    sample-fa.md
-  docs/
-    USAGE.md
-    ARCHITECTURE.md
-    CHANGELOG.md
-    GUI-PROPOSAL.md
-  scripts/
-    setup-windows.ps1
-    build-exe.ps1                 # ساخت فایل‌های exe با PyInstaller
-  tests/
-  fa-md-pdf.spec                  # PyInstaller spec برای CLI
-  fa-md-pdf-gui.spec              # PyInstaller spec برای GUI
-  entry_point.py                  # نقطه ورود exe برای CLI
-  entry_point_gui.py              # نقطه ورود exe برای GUI
-  pyproject.toml
-  requirements.txt
-  README.md
-```
+## Author & License
 
-## عیب‌یابی
+Created and maintained with ❤️ by **[Hamid Morsali](https://github.com/hamid-morsali-786)**.
 
-### خطای `No module named playwright`
-
-محیط مجازی را فعال کنید و پروژه را نصب کنید:
-
-```powershell
-.\.venv\Scripts\Activate.ps1
-pip install -e .
-```
-
-### خطای پیدا نشدن مرورگر Playwright
-
-مطمئن شوید این فولدر وجود دارد:
-
-```text
-browsers\chromium-...
-```
-
-و با `--verbose` بررسی کنید که برنامه همین فولدر را می‌بیند.
-
-### Mermaid نمایش داده نمی‌شود
-
-مطمئن شوید این فایل وجود دارد:
-
-```text
-vendor\mermaid.min.js
-```
-
-### فونت فارسی در PDF خوب نیست
-
-مطمئن شوید فونت‌ها داخل فولدر `fonts` هستند. برنامه فایل‌های `Vazirmatn-*.ttf` را خودکار داخل CSS embed می‌کند.
-
-### فونت فارسی در DOCX درست نمایش داده نمی‌شود
-
-DOCX نام فونت سیستمی را استفاده می‌کند، نه فایل embed شده. اطمینان حاصل کنید فونت Vazirmatn (یا فونت انتخابی شما) روی سیستم بازکننده فایل نصب باشد، یا با `--font-family` فونت موجود روی سیستم را انتخاب کنید:
-
-```powershell
-fa-md-pdf .\docs -f docx --font-family "Tahoma"
-```
-
-### عکس‌های نسبی داخل Markdown پیدا نمی‌شوند
-
-مسیر عکس‌ها را نسبت به همان فایل Markdown بنویسید. برنامه برای هر فایل، مسیر پایه HTML را فولدر همان فایل قرار می‌دهد.
-
-## توسعه
-
-نصب وابستگی‌های توسعه:
-
-```powershell
-pip install -e ".[dev]"
-pytest
-```
-
-## مجوز
-
-MIT
-
-</div>
+Licensed under the **[MIT License](LICENSE)**.
