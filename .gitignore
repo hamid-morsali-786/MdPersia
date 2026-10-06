@@ -18,4 +18,6 @@ output/
 *.log
 desktop-tauri/node_modules/
 desktop-tauri/dist/
+*.docx
+*.rtl.md
 
