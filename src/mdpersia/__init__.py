@@ -8,6 +8,11 @@ from fa_md_pdf.converter import (
     build_jobs,
     convert_jobs,
 )
+from fa_md_pdf.rtl_wrapper import (
+    WrapOptions,
+    wrap_rtl_in_file,
+    wrap_rtl_in_markdown,
+)
 from fa_md_pdf.cli import main
 
 __all__ = [
@@ -16,5 +21,9 @@ __all__ = [
     "build_jobs",
     "ConvertOptions",
     "ConversionError",
+    "WrapOptions",
+    "wrap_rtl_in_markdown",
+    "wrap_rtl_in_file",
     "main",
 ]
+

@@ -40,6 +40,7 @@
 - [Full Mermaid Diagrams Showcase](#full-mermaid-diagrams-showcase)
 - [Microsoft Word (DOCX) Deep Dive](#microsoft-word-docx-deep-dive)
 - [Vector PDF Deep Dive](#vector-pdf-deep-dive)
+- [Smart Markdown RTL Wrapping (RTL Markdown Deep Dive)](#-smart-markdown-rtl-wrapping-rtl-markdown-deep-dive)
 - [Installation](#installation)
 - [Quick Start & CLI Workflows](#quick-start--cli-workflows)
 - [Desktop Application (GUI)](#desktop-application-gui)
@@ -236,6 +237,60 @@ PDF generation uses Headless Chromium for crisp vector printing:
 4. **Custom Fonts**: Embed custom `.ttf` fonts with `--font-file` or `--font-dir`.
 5. **Custom CSS**: Inject your own styling rules with `--css custom.css`.
 6. **HTML Debugging**: Retain intermediate HTML with `--keep-html`.
+
+---
+
+## 🔀 Smart Markdown RTL Wrapping (RTL Markdown Deep Dive)
+
+A distinctive feature of MdPersia is its **smart Markdown-to-Markdown transformer**, accessible via the **`RTL Markdown`** button in the desktop GUI header format bar, or via the **`--wrap-rtl`** CLI flag.
+
+### Why Is This Needed?
+Popular platforms such as **GitHub**, **GitLab**, **Obsidian**, **Notion**, and documentation static site generators (**VitePress**, **Docusaurus**) render Markdown left-to-right (LTR) by default. When authoring Persian or Arabic technical documentation, mixed-language sentences containing English identifiers, package names, formulas, or punctuation marks like `()` become inverted and fragmented.
+
+This mode **does not convert to PDF or Word**; instead, it intelligently transforms the raw Markdown source so it renders perfectly right-to-left directly in browsers, GitHub previews, and Markdown editors.
+
+### Technical Architecture & Safety (`rtl_wrapper.py`)
+1. **Unicode Script Detection:** Scans text blocks using Persian/Arabic Unicode regex ranges along with zero-width non-joiners (`ZWNJ`), wrapping qualifying paragraphs in `<div dir="rtl">...</div>`.
+2. **Code & Math Protection:**
+   * Fenced code blocks (```` ``` ```` or `~~~`) remain strictly untouched and isolated in pure LTR.
+   * Display math blocks (`$$...$$`) and HTML comments (`<!-- ... -->`) are preserved without modification.
+3. **YAML Frontmatter Preservation:** Document-level metadata blocks (`--- ... ---`) at the start of Obsidian notes or blog posts are recognized and preserved.
+4. **Idempotent Execution:** Tracks existing `<div dir="rtl">` tag nesting depth. Running the tool repeatedly on already-wrapped files will never produce duplicate or nested wrappers.
+
+### Usage:
+
+#### 1. Desktop GUI
+In the Inspector Panel format bar (top right), choose **`RTL Markdown`**, then click **"تبدیل" (Convert)**.
+
+#### 2. Command-Line Interface (CLI)
+* **Batch wrap with `.rtl.md` suffix (default):**
+  ```bash
+  mdpersia ./docs --wrap-rtl
+  ```
+* **In-place overwrite (modifies files directly):**
+  ```bash
+  mdpersia ./docs --wrap-rtl --wrap-rtl-suffix ""
+  ```
+* **Custom suffix (e.g. `guide.fa.md`):**
+  ```bash
+  mdpersia ./guide.md --wrap-rtl --wrap-rtl-suffix "-fa"
+  ```
+* **Live watch mode:**
+  ```bash
+  mdpersia ./guide.md -w --wrap-rtl
+  ```
+
+#### 3. Python API
+```python
+from pathlib import Path
+from mdpersia import wrap_rtl_in_markdown, wrap_rtl_in_file
+
+# In-memory transformation
+formatted_markdown = wrap_rtl_in_markdown(raw_markdown_text)
+
+# Direct file transformation
+output_file = wrap_rtl_in_file(Path("docs/guide.md"))
+```
 
 ---
 
