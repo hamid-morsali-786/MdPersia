@@ -150,17 +150,68 @@ Force a new page in both PDF and Word by placing either tag:
 
 ## Full Mermaid Diagrams Showcase
 
-MdPersia renders all standard Mermaid diagrams into sharp retina PNG images for Word and vector graphics for PDF.
+MdPersia automatically detects ` ```mermaid ` fences and converts them into vector graphics for PDF and high-resolution PNGs for Word.
 
+### 1. Flowchart
 ```mermaid
 flowchart TD
-    MD[Input Markdown] --> AST[Markdown-It Parser]
-    AST --> BiDi[BiDi RTL Engine]
-    AST --> Mermaid[Mermaid Renderer]
-    BiDi --> Word[Word .docx Builder]
-    BiDi --> PDF[PDF Builder]
-    Mermaid --> Word
-    Mermaid --> PDF
+    Start([Start]) --> Input[/Input: Markdown File/]
+    Input --> Process{Inspect RTL Structure}
+    Process -->|Needs Wrapping| Fix[Inject RTL Wrappers]
+    Process -->|Standard| Render[Render DOCX & PDF]
+    Fix --> Render
+    Render --> Done([Completed])
+```
+
+### 2. Sequence Diagram
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as Developer
+    participant CLI as MdPersia CLI
+    participant Engine as Conversion Engine
+    participant Output as Word / PDF
+
+    User->>CLI: Run mdpersia doc.md -f docx
+    CLI->>Engine: Parse text & diagrams
+    Engine->>Engine: Render Mermaid to PNG
+    Engine->>Output: Inject native RTL paragraphs & tables
+    Output-->>User: Deliver formatted doc.docx
+```
+
+### 3. Class Diagram
+```mermaid
+classDiagram
+    class ConvertJob {
+        +Path source
+        +Path output
+        +Path html_output
+    }
+    class ConvertOptions {
+        +str output_format
+        +str font_family
+        +str page_format
+        +str margin
+        +bool landscape
+    }
+    class DocxBuilder {
+        +build_docx(tokens, options)
+    }
+    ConvertJob --> ConvertOptions
+    ConvertOptions --> DocxBuilder
+```
+
+### 4. Gantt Chart
+```mermaid
+gantt
+    title Documentation Project Schedule
+    dateFormat  YYYY-MM-DD
+    section Phase 1
+    Typography & Structure Analysis :done,    des1, 2026-10-01, 2026-10-03
+    Office OpenXML Implementation   :active,  des2, 2026-10-04, 3d
+    section Phase 2
+    BiDi & Table Verification       :         des3, after des2, 4d
+    Production Release              :         des4, after des3, 2d
 ```
 
 ---
@@ -267,7 +318,7 @@ Features:
 
 | Option | Type | Default | Description |
 | :--- | :---: | :---: | :--- |
-| `input` | Path | Current Dir | Input Markdown file or directory |
+| `input` | Path | Required (unless `--gui`) | Input Markdown file or directory |
 | `-o, --output` | Path | Alongside | Output file or destination directory |
 | `-f, --format` | Choice | `pdf` | Output format: `pdf` or `docx` |
 | `-w, --watch` | Flag | `False` | Watch input file/folder for live updates |
@@ -287,7 +338,9 @@ Features:
 | `--font-file` | Path | - | Custom local font file |
 | `--font-dir` | Path | `./fonts` | Directory containing Vazirmatn fonts |
 | `--css` | Path | - | Custom stylesheet file |
-| `--mermaid-theme` | Choice | `default` | Mermaid theme (`default`, `base`, `dark`, `forest`) |
+| `--mermaid-js` | Path | `./vendor/mermaid.min.js` | Local Mermaid JavaScript file path for offline rendering |
+| `--mermaid-url` | URL | - | Fallback remote CDN URL for Mermaid JavaScript |
+| `--mermaid-theme` | Choice | `default` | Mermaid theme (`default`, `base`, `dark`, `forest`, `neutral`) |
 | `--mermaid-timeout` | Int | `30000` | Diagram render timeout (milliseconds) |
 | `--ignore-mermaid-errors` | Flag | `False` | Continue conversion if Mermaid fails |
 | `--browsers-path` | Path | `./browsers` | Custom Playwright browsers path |
@@ -305,6 +358,7 @@ Features:
 from pathlib import Path
 from mdpersia import build_jobs, convert_jobs, ConvertOptions, ConversionError
 
+# 1. Configure conversion options
 options = ConvertOptions(
     output_format="docx",
     font_family='"Vazirmatn", sans-serif',
@@ -316,15 +370,18 @@ options = ConvertOptions(
     strip_emojis=False
 )
 
+# 2. Build the job queue
 jobs = build_jobs(
     input_path=Path("./docs/architecture.md"),
     output=Path("./dist/architecture.docx"),
-    options=options
+    output_format=options.output_format
 )
 
+# 3. Execute conversion
 try:
     results = convert_jobs(jobs, options=options, fail_fast=True)
-    print(f"Conversion completed successfully: {len(results)} jobs.")
+    success_count = sum(1 for r in results if r.ok)
+    print(f"Conversion completed: {success_count} succeeded, {len(results) - success_count} failed.")
 except ConversionError as err:
     print(f"Conversion error: {err}")
 ```
@@ -351,7 +408,7 @@ jobs:
       - name: Install MdPersia
         run: |
           pip install mdpersia
-          python -m playwright install chromium
+          python -m playwright install --with-deps chromium
       - name: Compile PDF and Word Documentation
         run: |
           mdpersia docs/ -o dist/pdf/ -f pdf
@@ -365,6 +422,34 @@ jobs:
 
 ---
 
+## Architecture
+
+```mermaid
+flowchart TD
+    MD[Input Markdown File] --> Parser[Markdown-It-Py Parser]
+    
+    subgraph Core Processing Pipeline
+        Parser --> AST[Syntax Tree AST]
+        AST --> BiDi[BiDi RTL Engine & Isolation]
+        AST --> MermaidExt[Mermaid Diagram Extractor]
+    end
+
+    MermaidExt --> LocalMermaid[Offline Mermaid.js]
+    LocalMermaid --> Chromium[Headless Chromium]
+    Chromium --> PNG[High-Resolution PNGs]
+
+    BiDi --> HTMLGen[Vector HTML Generator]
+    PNG --> HTMLGen
+    HTMLGen --> ChromiumPDF[Chromium PDF Engine]
+    ChromiumPDF --> PDFOut[(Vector PDF Document)]
+
+    BiDi --> DocxGen[Office OpenXML Builder]
+    PNG --> DocxGen
+    DocxGen --> WordOut[(Native Word .docx Document)]
+```
+
+---
+
 ## Star History
 
 [![Star History Chart](https://api.star-history.com/svg?repos=hamid-morsali-786/MdPersia&type=Date)](https://star-history.com/#hamid-morsali-786/MdPersia&Date)
@@ -374,7 +459,7 @@ jobs:
 ## Contributing
 
 We welcome contributions from the community!  
-Please see our [Contributing Guide](CONTRIBUTING.md) and [Code of Conduct](CODE_OF_CONDUCT.md).
+Please see our [Contributing Guide](CONTRIBUTING.md), [Code of Conduct](CODE_OF_CONDUCT.md), and [Security Policy](SECURITY.md).
 
 ---
 

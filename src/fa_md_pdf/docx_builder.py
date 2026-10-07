@@ -1201,6 +1201,11 @@ def _add_table_from_tokens(
                 # Don't set jc; bidi handles alignment
 
             is_header = row_idx == 0
+            if is_header and col_idx == 0:
+                trPr = table.rows[row_idx]._tr.get_or_add_trPr()
+                if trPr.find(qn("w:tblHeader")) is None:
+                    trPr.append(trPr.makeelement(qn("w:tblHeader"), {}))
+
             _render_inline_tokens(
                 paragraph,
                 inline_tokens,

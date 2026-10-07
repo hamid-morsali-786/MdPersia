@@ -30,27 +30,27 @@
 
 ## 📑 فهرست مطالب (Table of Contents)
 
-- [معرفی و چرا MdPersia؟](#-معرفی-و-چرا-mdpersia)
-- [ویژگی‌های کلیدی](#-ویژگیهای-کلیدی-key-features)
-- [جدول مقایسه قابلیت‌ها](#-جدول-مقایسه-قابلیتها)
-- [راهنمای جامع نحو و فرمت‌بندی Markdown](#-راهنمای-جامع-نحو-و-فرمتبندی-markdown)
+- [معرفی و چرا MdPersia؟](#معرفی-و-چرا-mdpersia)
+- [ویژگی‌های کلیدی](#ویژگیهای-کلیدی-key-features)
+- [جدول مقایسه قابلیت‌ها](#جدول-مقایسه-قابلیتها)
+- [راهنمای جامع نحو و فرمت‌بندی Markdown](#راهنمای-جامع-نحو-و-فرمتبندی-markdown)
   - [باکس‌های اعلان و هشدار (Callouts / Admonitions)](#باکسهای-اعلان-و-هشدار-callouts--admonitions)
   - [هایلایت هوشمند کدهای برنامه‌نویسی](#هایلایت-هوشمند-کدهای-برنامهنویسی-syntax-highlighting)
   - [جدول‌های راست‌چین پیشرفته](#جدولهای-راستچین-پیشرفته-rtl-tables)
   - [شکستن صفحه برای چاپ (Page Break)](#شکستن-صفحه-برای-چاپ-page-break)
   - [مدیریت اموجی‌ها و فونت نمادها](#مدیریت-اموجیها-و-فونت-نمادها)
-- [پشتیبانی جامع از دیاگرام‌های Mermaid](#-پشتیبانی-جامع-از-دیاگرامهای-mermaid)
-- [شخصی‌سازی خروجی Word (DOCX Deep Dive)](#-شخصیسازی-خروجی-word-docx-deep-dive)
-- [شخصی‌سازی خروجی PDF (PDF Deep Dive)](#-شخصیسازی-خروجی-pdf-pdf-deep-dive)
-- [نصب و راه‌اندازی](#-نصب-و-راهاندازی-installation)
-- [شروع سریع و جریان‌های کاری CLI](#-شروع-سریع-و-جریانهای-کاری-cli)
-- [اپلیکیشن دسکتاپ و محیط گرافیکی (GUI)](#-اپلیکیشن-دسکتاپ-و-محیط-گرافیکی-gui)
-- [جدول جامع تمام پارامترهای خط فرمان (CLI Reference)](#-جدول-جامع-تمام-پارامترهای-خط-فرمان-cli-reference)
-- [استفاده از کتابخانه در پایتون (Python API)](#-استفاده-از-کتابخانه-در-پایتون-python-api)
-- [یکپارچه‌سازی در CI/CD و اتوماسیون سازمانی](#-یکپارچهسازی-در-cicd-و-اتوماسیون-سازمانی)
-- [معماری سیستم (Architecture)](#-معماری-سیستم-architecture)
-- [تاریخچه ستاره‌ها (Star History)](#-تاریخچه-ستارهها-star-history)
-- [مشارکت و حق امتیاز](#-مشارکت-و-حق-امتیاز)
+- [پشتیبانی جامع از دیاگرام‌های Mermaid](#پشتیبانی-جامع-از-دیاگرامهای-mermaid)
+- [شخصی‌سازی خروجی Word (DOCX Deep Dive)](#شخصیسازی-خروجی-word-docx-deep-dive)
+- [شخصی‌سازی خروجی PDF (PDF Deep Dive)](#شخصیسازی-خروجی-pdf-pdf-deep-dive)
+- [نصب و راه‌اندازی](#نصب-و-راهاندازی-installation)
+- [شروع سریع و جریان‌های کاری CLI](#شروع-سریع-و-جریانهای-کاری-cli)
+- [اپلیکیشن دسکتاپ و محیط گرافیکی (GUI)](#اپلیکیشن-دسکتاپ-و-محیط-گرافیکی-gui)
+- [جدول جامع تمام پارامترهای خط فرمان (CLI Reference)](#جدول-جامع-تمام-پارامترهای-خط-فرمان-cli-reference)
+- [استفاده از کتابخانه در پایتون (Python API)](#استفاده-از-کتابخانه-در-پایتون-python-api)
+- [یکپارچه‌سازی در CI/CD و اتوماسیون سازمانی](#یکپارچهسازی-در-cicd-و-اتوماسیون-سازمانی)
+- [معماری سیستم (Architecture)](#معماری-سیستم-architecture)
+- [تاریخچه ستاره‌ها (Star History)](#تاریخچه-ستارهها-star-history)
+- [مشارکت و حق امتیاز](#مشارکت-و-حق-امتیاز)
 
 ---
 
@@ -199,7 +199,7 @@ classDiagram
         +Path html_output
     }
     class ConvertOptions {
-        +str format
+        +str output_format
         +str font_family
         +str page_format
         +str margin
@@ -347,7 +347,7 @@ mdpersia --gui
 
 | پارامتر | نوع | پیش‌فرض | توضیحات کامل |
 | :--- | :---: | :---: | :--- |
-| `input` | مسیر | پوشه جاری | مسیر فایل مارک‌داون یا پوشه حاوی اسناد |
+| `input` | مسیر | اجباری (مگر در حالت `--gui`) | مسیر فایل مارک‌داون یا پوشه حاوی اسناد |
 | `-o, --output` | مسیر | کنار مبدا | مسیر فایل خروجی یا پوشه مقصد برای پردازش دسته‌ای |
 | `-f, --format` | گزینه | `pdf` | فرمت خروجی: `pdf` یا `docx` |
 | `-w, --watch` | سوئیچ | غیرفعال | پایش تغییرات فایل ورودی و تبدیل خودکار پس از ذخیره |
@@ -367,6 +367,8 @@ mdpersia --gui
 | `--font-file` | مسیر | - | فایل فونت محلی جهت لود از طریق `@font-face` |
 | `--font-dir` | مسیر | `./fonts` | پوشه حاوی فونت‌های Vazirmatn-*.ttf |
 | `--css` | مسیر | - | فایل CSS سفارشی الحاقی |
+| `--mermaid-js` | مسیر | `./vendor/mermaid.min.js` | مسیر فایل محلی جاوااسکریپت Mermaid جهت کارکرد آفلاین |
+| `--mermaid-url` | آدرس | - | آدرس CDN جایگزین جاوااسکریپت Mermaid |
 | `--mermaid-theme` | گزینه | `default` | تم نمودارها (`default`, `base`, `dark`, `forest`, `neutral`) |
 | `--mermaid-timeout` | عدد | `30000` | مهلت رندر دیاگرام‌ها (به میلی‌ثانیه) |
 | `--ignore-mermaid-errors` | سوئیچ | غیرفعال | ادامه تبدیل حتی در صورت بروز خطای سینتکس در Mermaid |
@@ -403,7 +405,7 @@ options = ConvertOptions(
 jobs = build_jobs(
     input_path=Path("./docs/architecture.md"),
     output=Path("./dist/architecture.docx"),
-    options=options
+    output_format=options.output_format
 )
 
 # ۳. اجرای عملیات تبدیل
@@ -439,7 +441,7 @@ jobs:
       - name: Install MdPersia
         run: |
           pip install mdpersia
-          python -m playwright install chromium
+          python -m playwright install --with-deps chromium
       - name: Build PDF and Word Documentation
         run: |
           mdpersia docs/ -o dist/pdf/ -f pdf
