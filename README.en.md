@@ -167,12 +167,10 @@ flowchart TD
 ### 2. Sequence Diagram
 ```mermaid
 sequenceDiagram
-    autonumber
-    actor User as Developer
-    participant CLI as MdPersia CLI
-    participant Engine as Conversion Engine
-    participant Output as Word / PDF
-
+    actor User as "Developer"
+    participant CLI as "MdPersia CLI"
+    participant Engine as "Conversion Engine"
+    participant Output as "Word / PDF"
     User->>CLI: Run mdpersia doc.md -f docx
     CLI->>Engine: Parse text & diagrams
     Engine->>Engine: Render Mermaid to PNG

@@ -178,12 +178,10 @@ flowchart TD
 ### ۲. نمودار توالی (Sequence Diagram)
 ```mermaid
 sequenceDiagram
-    autonumber
-    actor User as کاربر
-    participant CLI as خط فرمان MdPersia
-    participant Engine as موتور تبدیل
-    participant Output as فایل DOCX / PDF
-
+    actor User as "کاربر"
+    participant CLI as "خط فرمان MdPersia"
+    participant Engine as "موتور تبدیل"
+    participant Output as "فایل DOCX / PDF"
     User->>CLI: اجرای mdpersia doc.md -f docx
     CLI->>Engine: تفکیک متون و دیاگرام‌ها
     Engine->>Engine: رندر Mermaid به تصویر PNG
