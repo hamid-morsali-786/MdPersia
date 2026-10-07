@@ -20,7 +20,7 @@ export const Header: React.FC<HeaderProps> = ({
           <Sparkles className="w-4 h-4" />
         </div>
         <div className="flex items-baseline gap-2">
-          <h1 className="text-sm font-bold text-main font-mono tracking-tight">fa-md-pdf</h1>
+          <h1 className="text-sm font-bold text-main font-mono tracking-tight">MdPersia</h1>
           <span className="text-[11px] text-muted font-medium hidden sm:inline">
             تبدیل تخصصی مارک‌داون فارسی به PDF و Word
           </span>

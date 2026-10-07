@@ -1,173 +1,194 @@
-<p align="center">
-  <h1 align="center">MdPersia</h1>
-  <p align="center">
-    <strong>The Modern, Offline-First Persian & RTL Markdown to Word (DOCX) and PDF Converter</strong><br />
-    Native Mermaid Diagrams &bull; Flawless BiDi Formatting &bull; High-Fidelity Word Styling &bull; CLI &amp; GUI
-  </p>
-</p>
+<div align="center">
+
+# مدپرشیا (MdPersia)
+### ابزار مدرن، آفلاین و تخصصی تبدیل اسناد Markdown فارسی و RTL به Word (DOCX) و PDF
+
+[![GitHub Stars](https://img.shields.io/github/stars/hamid-morsali-786/MdPersia?style=for-the-badge&color=e8590c)](https://github.com/hamid-morsali-786/MdPersia/stargazers)
+[![GitHub Forks](https://img.shields.io/github/forks/hamid-morsali-786/MdPersia?style=for-the-badge&color=f59e0b)](https://github.com/hamid-morsali-786/MdPersia/network/members)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](LICENSE)
+[![Python Version](https://img.shields.io/badge/Python-3.11%20%7C%203.12%20%7C%203.13-brightgreen?style=for-the-badge&logo=python)](https://python.org)
+[![CI Build](https://img.shields.io/badge/CI-Passing-success?style=for-the-badge&logo=githubactions)](https://github.com/hamid-morsali-786/MdPersia/actions)
+[![PRs Welcome](https://img.shields.io/badge/PRs-Welcome-brightgreen.svg?style=for-the-badge)](CONTRIBUTING.md)
 
 <p align="center">
-  <a href="https://github.com/hamid-morsali-786/MdPersia/actions/workflows/ci.yml">
-    <img src="https://github.com/hamid-morsali-786/MdPersia/actions/workflows/ci.yml/badge.svg" alt="CI Status" />
-  </a>
-  <a href="https://pypi.org/project/mdpersia/">
-    <img src="https://img.shields.io/pypi/v/mdpersia.svg?color=blue" alt="PyPI Version" />
-  </a>
-  <a href="https://www.python.org/">
-    <img src="https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-3776AB.svg?logo=python&logoColor=white" alt="Python Versions" />
-  </a>
-  <a href="LICENSE">
-    <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License" />
-  </a>
-  <a href="https://github.com/astral-sh/ruff">
-    <img src="https://img.shields.io/badge/code%20style-ruff-000000.svg" alt="Code Style: Ruff" />
-  </a>
-  <a href="README_FA.md">
-    <img src="https://img.shields.io/badge/مستندات-فارسی-orange.svg" alt="Persian Docs" />
-  </a>
+  <b>توسعه و نگهداری توسط:</b> <a href="https://github.com/hamid-morsali-786">hamid-morsali-786</a>
 </p>
 
+**فارسی** | [English](README.en.md)
+
+<br/>
+
 <p align="center">
-  <a href="#why-mdpersia">Why MdPersia</a> &bull;
-  <a href="#features">Key Features</a> &bull;
-  <a href="#comparison">Comparison Matrix</a> &bull;
-  <a href="#quickstart">Quickstart</a> &bull;
-  <a href="#cli-usage">CLI Usage</a> &bull;
-  <a href="#python-api">Python API</a> &bull;
-  <a href="#architecture">Architecture</a> &bull;
-  <a href="#contributing">Contributing</a>
+  <img src="docs/screenshots/desktop-ui-light.png" width="900" alt="رابط کاربری نرم‌افزار MdPersia - تم روشن">
 </p>
+
+</div>
 
 ---
 
-## Why MdPersia?
+<div dir="rtl">
 
-Converting technical Markdown files containing **Persian / Arabic (RTL)** text into publishable documents has historically been frustrating:
+## 📑 فهرست مطالب (Table of Contents)
 
-- ❌ **Flipped Punctuation & Mixed Text**: English terms, version numbers, brackets `()` and code blocks within Persian text frequently flip direction in traditional PDF generators.
-- ❌ **Broken Word (DOCX) Tables & Layouts**: Generic converters produce left-to-right Word files where text clings to the wrong side and tables lose alignment.
-- ❌ **Failed Mermaid Rendering**: System architecture diagrams, flowcharts, and sequence diagrams rarely render without external internet connections or complex LaTeX toolchains.
-
-**MdPersia** solves this definitively. It provides a rock-solid, offline-first pipeline that renders Markdown files with accurate BiDi text direction, beautiful Persian typography (Vazirmatn), crystal-clear Mermaid diagrams, and exports them directly to both **vector PDF** and **native Microsoft Word (DOCX)**.
-
----
-
-## Features
-
-- 📑 **Dual Native Outputs**: Generate publication-grade **PDFs** via headless Chromium, or fully editable, RTL-configured **Word (.docx)** files.
-- 📐 **First-Class Mermaid Support**: Flowcharts, Sequence Diagrams, Gantt charts, and Class diagrams are automatically rendered and embedded.
-- 🔒 **100% Offline-First**: Zero runtime calls to external CDNs. Bundles local Chromium support, embedded Vazirmatn fonts, and local Mermaid JavaScript.
-- 🔄 **Real-Time Watch Mode (`-w` / `--watch`)**: Automatically re-compiles documents on file save.
-- 📦 **Batch Directory Conversion**: Converts entire documentation folders while preserving hierarchical directory structures.
-- 🪄 **Intelligent Markdown Repair (`--wrap-rtl`)**: Automatically wraps Persian paragraphs with `<div dir="rtl">` without touching code blocks or existing markup.
-- 🖥️ **Both CLI and Modern GUI**: Seamless command-line interface for CI/CD and scripts, plus a clean graphical interface (Tkinter and Tauri).
+- [معرفی و چرا MdPersia؟](#-معرفی-و-چرا-mdpersia)
+- [ویژگی‌های کلیدی](#-ویژگیهای-کلیدی-key-features)
+- [جدول مقایسه قابلیت‌ها](#-جدول-مقایسه-قابلیتها)
+- [نصب و راه‌اندازی](#-نصب-و-راهاندازی-installation)
+- [شروع سریع (Quick Start)](#-شروع-سریع-quick-start)
+- [رابط کاربری گرافیکی (Desktop GUI)](#-رابط-کاربری-گرافیکی-desktop-gui)
+- [جدول راهنمای گزینه‌های CLI](#-جدول-راهنمای-گزینههای-cli)
+- [استفاده از کتابخانه در پایتون (Python API)](#-استفاده-از-کتابخانه-در-پایتون-python-api)
+- [معماری سیستم (Architecture)](#-معماری-سیستم-architecture)
+- [تاریخچه ستاره‌ها (Star History)](#-تاریخچه-ستارهها-star-history)
+- [مشارکت و حق امتیاز](#-مشارکت-و-حق-امتیاز)
 
 ---
 
-## Comparison Matrix
+## 🎯 معرفی و چرا MdPersia؟
 
-| Feature | MdPersia | Pandoc + XeLaTeX | VS Code Markdown-PDF | Typora Export |
+توسعه‌دهندگان، پژوهشگران و تولیدکنندگان محتوا هنگام تبدیل فایل‌های Markdown حاوی متون **فارسی و راست‌به‌چپ (RTL)** به اسناد قابل چاپ و ارائه، همواره با چالش‌های فنی متعددی روبه‌رو بوده‌اند:
+
+- ❌ **به‌هم‌ریختگی علائم و متون ترکیبی:** کلمات انگلیسی، پرانتزها `()`، اعداد و کدهای درون‌خطی در خروجی ابزارهای رایج برعکس یا جابه‌جا می‌شوند.
+- ❌ **فقدان ساختار راست‌چین در Word (DOCX):** تبدیل‌کننده‌های رایج، جهت سند Word و جداول را چپ‌به‌راست می‌سازند و پاراگراف‌ها از چپ تراز می‌شوند.
+- ❌ **عدم رندر صحیح نمودارهای Mermaid:** فلوچارت‌ها و دیاگرام‌های فنی درون Markdown بدون اینترنت یا ابزارهای پیچیده رندر نمی‌شوند.
+
+**مدپرشیا (MdPersia)** برای حل کامل این مشکلات طراحی شده است؛ این ابزار با معماری دوگانه و مدرن خود، متون مارک‌داون شما را با جهت‌بندی بی‌نقص BiDi، فونت استاندارد وزیرمتن و رندر دقیق دیاگرام‌های Mermaid مستقیماً به دو فرمت رسمی **PDF برداری** و **Microsoft Word (DOCX)** تبدیل می‌کند.
+
+---
+
+## 🚀 ویژگی‌های کلیدی (Key Features)
+
+| قابلیت | شرح فنی | مزیت |
+|---|---|---|
+| 📄 **خروجی هم‌زمان Word و PDF** | تولید فایل `.docx` کاملاً راست‌چین و فایل `.pdf` برداری با کیفیت چاپ | مناسب برای گزارش‌های رسمی سازمانی و مقالات |
+| 📊 **پشتیبانی کامل از Mermaid** | تبدیل خودکار انواع Flowchart، Sequence، Class و Gantt | قرارگیری تصاویر نمودارها با کیفیت رتینا درون سند |
+| ⚡ **کاملاً آفلاین (Offline-First)** | بدون وابستگی به CDNهای آنلاین و اینترنت | مرورگر، فونت‌های وزیرمتن و رندرر همگی به صورت محلی مدیریت می‌شوند |
+| 🔄 **پایش زنده (`-w` / `--watch`)** | کامپایل مجدد و بلادرنگ اسناد با هر ذخیره‌سازی (`Ctrl+S`) | تجربه کاری روان و آنی بدون نیاز به اجرای مکرر دستور |
+| 📁 **تبدیل دسته‌ای پوشه‌ها** | پردازش هم‌زمان کل پوشه‌ها با حفظ دقیق ساختار درختی | تبدیل خودکار کل مستندات پروژه در چند ثانیه |
+| 🪄 **اصلاح هوشمند (`--wrap-rtl`)** | تزریق خودکار `<div dir="rtl">` بدون آسیب به بلوک‌های کد | اصلاح و آماده‌سازی سریع یادداشت‌های قدیمی |
+| 🖥️ **رابط گرافیکی مدرن (GUI)** | اپلیکیشن دسکتاپ بر پایه Tauri با تم روشن/تاریک و کنسول زنده | استفاده آسان برای تمام کاربران حتی بدون استفاده از ترمینال |
+
+---
+
+## 📊 جدول مقایسه قابلیت‌ها
+
+| ویژگی | MdPersia | Pandoc + XeLaTeX | VS Code Markdown-PDF | Typora Export |
 | :--- | :---: | :---: | :---: | :---: |
-| **Persian / RTL Accuracy** | **Flawless (Native)** | Complex Config | Inconsistent | Good |
-| **Native Word (.docx) RTL** | **Yes (Full RTL)** | Basic / LTR Defaults | No | Basic |
-| **Offline Mermaid Diagrams** | **Built-in** | Requires Filters | Requires Internet | Partial |
-| **Zero External Setup** | **Yes (Standalone)** | Requires >4GB TeXLive | Requires Extension | Closed Source |
-| **Batch Folder Processing** | **Yes** | Manual Scripting | Manual | No |
-| **Live Watch Daemon** | **Yes (`-w`)** | No | No | No |
-| **Graphical User Interface** | **Yes (GUI included)** | No | Editor GUI | Editor GUI |
+| **دقت حروف‌چینی فارسی و RTL** | **بی‌نقص و پیش‌فرض** | نیازمند تنظیمات پیچیده | ناپایدار در متون ترکیبی | خوب |
+| **خروجی Word (DOCX) راست‌چین** | **بله (کامل و بومی)** | پایه و چپ‌چین | خیر | متوسط |
+| **رندر آفلاین دیاگرام‌های Mermaid** | **داخلی و خودکار** | نیازمند فیلترهای جانبی | نیازمند اینترنت | وابسته به موتور نرم‌افزار |
+| **حجم و پیش‌نیاز راه‌اندازی** | **سبک و بدون پیش‌نیاز سنگین** | نیازمند TeXLive با حجم چند گیگابایت | وابسته به افزونه ادیتور | بسته و غیرمتن‌باز |
+| **پردازش دسته‌ای پوشه‌ها** | **بله** | نیازمند اسکریپت‌نویسی | دستی | خیر |
+| **پایش زنده (Watch Daemon)** | **بله (`-w`)** | خیر | خیر | خیر |
+| **رابط کاربری دسکتاپ (GUI)** | **بله (همراه پروژه)** | خیر | رابط ادیتور | رابط ادیتور |
 
 ---
 
-## Installation
+## 💻 نصب و راه‌اندازی (Installation)
 
-### Via pip
-
+### نصب از طریق pip
 ```bash
 pip install mdpersia
 ```
 
-### From Source (Development)
-
-```bash
+### نصب سورس پروژه (برای توسعه‌دهندگان)
+```powershell
 git clone https://github.com/hamid-morsali-786/MdPersia.git
 cd MdPersia
 
-# Create and activate virtual environment
-python -m venv .venv
-source .venv/bin/activate  # On Windows: .\.venv\Scripts\Activate.ps1
+# ساخت و فعال‌سازی محیط مجازی
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
 
-# Install in editable mode with dev dependencies
+# نصب پکیج و وابستگی‌ها در حالت توسعه
 pip install -e ".[dev]"
 ```
 
-### Headless Browser Setup (One-time)
-
-If you have an internet connection during setup:
-```bash
+### آماده‌سازی موتور مرورگر (یک‌بار برای همیشه)
+اگر به اینترنت متصل هستید:
+```powershell
 python -m playwright install chromium
 ```
 
-> **Offline Portable Mode:** Place your Chromium binaries in `./browsers/`, fonts in `./fonts/`, and `mermaid.min.js` in `./vendor/`. MdPersia will automatically detect them without needing any system installations!
+> **حالت پرتابل و کاملاً آفلاین:** اگر فایل‌های Chromium را در پوشه `browsers/`، فونت‌ها را در `fonts/` و فایل `mermaid.min.js` را در پوشه `vendor/` قرار دهید، برنامه بدون نیاز به هیچ اتصال اینترنتی کار خواهد کرد.
 
 ---
 
-## Quickstart
+## ⚡ شروع سریع (Quick Start)
 
-### 1. Convert a single file to PDF
-```bash
-mdpersia ./docs/sample.md
+### ۱. تبدیل یک فایل به PDF (پیش‌فرض)
+```powershell
+mdpersia .\docs\sample.md
 ```
-*Creates `./docs/sample.pdf`.*
+*خروجی `docs\sample.pdf` با فونت زیبای وزیرمتن ساخته می‌شود.*
 
-### 2. Convert to Microsoft Word (DOCX)
-```bash
-mdpersia ./docs/sample.md -f docx
+### ۲. تبدیل به فایل Word (DOCX)
+```powershell
+mdpersia .\docs\sample.md -f docx
 ```
-*Creates `./docs/sample.docx` with right-to-left layout and styled tables.*
+*خروجی `docs\sample.docx` با جدول‌ها و پاراگراف‌های کاملاً راست‌چین ایجاد می‌گردد.*
 
-### 3. Convert an entire folder with custom output directory
-```bash
-mdpersia ./docs -o ./dist -f pdf
-```
-
-### 4. Watch for changes in real time
-```bash
-mdpersia ./docs/specification.md -w -f pdf
+### ۳. تبدیل دسته‌ای تمام فایل‌های یک پوشه به همراه مقصد دلخواه
+```powershell
+mdpersia .\docs -o .\output -f pdf
 ```
 
-### 5. Launch the Graphical User Interface
-```bash
+### ۴. فعال‌سازی حالت پایش زنده (Live Watch Mode)
+```powershell
+mdpersia .\docs\report.md -w -f docx
+```
+
+### ۵. اجرای رابط گرافیکی
+```powershell
 mdpersia --gui
 ```
+*یا اجرای فایل `run_gui.bat` با دابل‌کلیک در ویندوز.*
 
 ---
 
-## Architecture
+## 🖥️ رابط کاربری گرافیکی (Desktop GUI)
 
-```mermaid
-flowchart LR
-    A[Markdown File<br/>fa-text.md] --> B{MdPersia Engine}
-    B -->|Parse & RTL Guard| C[Markdown-It-Py AST]
-    C -->|Diagram Extraction| D[Local Mermaid Engine]
-    D --> E[Headless Chromium]
-    E -->|Print to PDF| F[Vector PDF File]
-    C -->|Docx AST Builder| G[Python-docx + RTL XML]
-    D -->|High-Res PNG| G
-    G --> H[Microsoft Word .docx]
-```
+نرم‌افزار دسکتاپ **مدپرشیا** امکانات کاملی برای مدیریت پروژه‌های مستندسازی فراهم می‌کند:
+- **صف فایل‌ها:** امکان افزودن فایل‌ها یا پوشه‌ها و مشاهده وضعیت هر فایل.
+- **پنل تنظیمات سند:** انتخاب قطع کاغذ (A4، Letter، A3)، تنظیم حاشیه‌ها، انتخاب تم دیاگرام‌های Mermaid و تعیین اندازه فونت Word.
+- **کنسول و لاگ‌های زنده:** نمایش بلادرنگ مراحل تبدیل با امکان توقف آنی.
+- **تغییر تم:** پشتیبانی کامل از تم روشن و تاریک.
+
+<p align="center">
+  <img src="docs/screenshots/desktop-ui-light.png" width="850" alt="رابط کاربری مدپرشیا در تم روشن">
+</p>
 
 ---
 
-## Python API
+## ⚙️ جدول راهنمای گزینه‌های CLI
 
-You can easily integrate MdPersia into your own Python applications or automation pipelines:
+| سوئیچ | توضیحات | مقدار پیش‌فرض |
+| :--- | :--- | :--- |
+| `input` | مسیر فایل یا پوشه شامل فایل‌های Markdown | پوشه جاری |
+| `-o, --output` | مسیر ذخیره فایل یا پوشه خروجی | کنار فایل اصلی |
+| `-f, --format` | فرمت خروجی (`pdf` یا `docx`) | `pdf` |
+| `-w, --watch` | پایش تغییرات فایل و تبدیل آنی پس از ذخیره | غیرفعال |
+| `--gui` | باز کردن رابط گرافیکی دسکتاپ | غیرفعال |
+| `--docx-image-scale` | ضریب کیفیت تصاویر Mermaid در فایل Word (۱ تا ۴) | `3` |
+| `--docx-font-size` | اندازه قلم متن اصلی در Word (به پوینت) | `12` |
+| `--page-format` | ابعاد برگه در PDF (`A4`, `Letter`, `Legal`) | `A4` |
+| `--margin` | اندازه حاشیه صفحات در PDF (مانند `15mm` یا `1in`) | `15mm` |
+| `--landscape` | تولید صفحات افقی | عمودی |
+| `--strip-emojis` | حذف اموجی‌ها از خروجی نهایی سند | غیرفعال |
+| `--wrap-rtl` | تزریق خودکار تگ‌های `<div dir="rtl">` به متن | غیرفعال |
+
+---
+
+## 🐍 استفاده از کتابخانه در پایتون (Python API)
+
+می‌توانید از قابلیت‌های **MdPersia** درون کدهای پایتون خود نیز استفاده کنید:
 
 ```python
 from pathlib import Path
 from mdpersia import build_jobs, convert_jobs, ConvertOptions
 
 options = ConvertOptions(
-    format="docx",       # "pdf" or "docx"
+    format="docx",       # یا "pdf"
     font_family='"Vazirmatn", sans-serif',
     page_format="A4",
     margin="15mm"
@@ -179,63 +200,41 @@ jobs = build_jobs(
 )
 
 success, failed = convert_jobs(jobs)
-print(f"Completed: {success} succeeded, {failed} failed.")
+print(f"نتیجه تبدیل: {success} موفق، {failed} ناموفق")
 ```
 
 ---
 
-## CLI Options Reference
+## 🏗️ معماری سیستم (Architecture)
 
-```text
-usage: mdpersia [-h] [-o OUTPUT] [-f {pdf,docx}]
-                [--docx-image-scale {1,2,3,4}]
-                [--docx-image-min-width DOCX_IMAGE_MIN_WIDTH]
-                [--docx-image-max-width DOCX_IMAGE_MAX_WIDTH]
-                [--docx-font-size DOCX_FONT_SIZE] [--recursive]
-                [--no-recursive] [--extensions EXTENSIONS [EXTENSIONS ...]]
-                [--font-family FONT_FAMILY] [--font-file FONT_FILE]
-                [--font-dir FONT_DIR] [--css CSS] [--page-format PAGE_FORMAT]
-                [--margin MARGIN] [--landscape] [--strip-emojis]
-                [--mermaid-js MERMAID_JS] [--mermaid-url MERMAID_URL]
-                [--mermaid-theme {default,base,dark,forest,neutral,null}]
-                [--mermaid-timeout MERMAID_TIMEOUT] [--ignore-mermaid-errors]
-                [--browsers-path BROWSERS_PATH] [--keep-html] [--fail-fast]
-                [--verbose] [--version] [--gui] [--wrap-rtl]
-                [--wrap-rtl-suffix WRAP_RTL_SUFFIX] [-w]
-                [input]
+```mermaid
+flowchart LR
+    A[فایل مارک‌داون<br/>fa-text.md] --> B{موتور مدپرشیا}
+    B -->|تحلیل نحو و اصلاح RTL| C[درخت نحو Markdown-It-Py]
+    C -->|استخراج نمودارها| D[موتور محلی Mermaid]
+    D --> E[مرورگر Headless Chromium]
+    E -->|چاپ برداری| F[سند نهایی PDF]
+    C -->|تبدیل به عناصر سند اداری| G[موتور Python-docx + ساختار RTL XML]
+    D -->|تصویر با وضوح بالا| G
+    G --> H[سند نهایی Microsoft Word .docx]
 ```
 
-| Flag | Description | Default |
-| :--- | :--- | :--- |
-| `input` | File or folder containing Markdown files | Current directory |
-| `-o, --output` | Output file path or destination folder | Next to source file |
-| `-f, --format` | Output format: `pdf` or `docx` | `pdf` |
-| `-w, --watch` | Watch file/folder for live auto-conversion | `False` |
-| `--gui` | Launch graphical desktop window | `False` |
-| `--docx-image-scale` | Diagram resolution multiplier for Word (1-4) | `3` |
-| `--page-format` | PDF page size (`A4`, `Letter`, `Legal`) | `A4` |
-| `--margin` | Page margin (e.g., `15mm`, `1in`, `20px`) | `15mm` |
-| `--landscape` | Produce landscape orientation documents | Portrait |
-| `--strip-emojis` | Strip emojis from converted documents | `False` |
-| `--wrap-rtl` | Automatically inject `<div dir="rtl">` tags | `False` |
+---
+
+## ⭐ تاریخچه ستاره‌ها (Star History)
+
+[![Star History Chart](https://api.star-history.com/svg?repos=hamid-morsali-786/MdPersia&type=Date)](https://star-history.com/#hamid-morsali-786/MdPersia&Date)
 
 ---
 
-## Contributing
+## 🤝 مشارکت و حق امتیاز
 
-We welcome contributions from the community!  
-Please see our [Contributing Guide](CONTRIBUTING.md) and [Code of Conduct](CODE_OF_CONDUCT.md) for details on submitting pull requests, reporting issues, or suggesting design improvements.
+از همه مشارکت‌ها، پیشنهادات و گزارش‌های اشکال استقبال می‌کنیم! لطفاً قبل از شروع، [راهنمای مشارکت (CONTRIBUTING.md)](CONTRIBUTING.md) و [منشور اخلاقی (CODE_OF_CONDUCT.md)](CODE_OF_CONDUCT.md) را مطالعه فرمایید.
 
----
+### توسعه‌دهنده
+توسعه‌داده شده با ❤️ توسط **[حمید مرسلی (Hamid Morsali)](https://github.com/hamid-morsali-786)**.
 
-## Security
+### لایسنس
+این پروژه تحت مجوز متن‌باز **[MIT License](LICENSE)** منتشر شده است.
 
-Please review our [Security Policy](SECURITY.md) to report vulnerabilities responsibly.
-
----
-
-## Author & License
-
-Created and maintained with ❤️ by **[Hamid Morsali](https://github.com/hamid-morsali-786)**.
-
-Licensed under the **[MIT License](LICENSE)**.
+</div>

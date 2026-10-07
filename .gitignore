@@ -22,5 +22,4 @@ desktop-tauri/dist/
 *.docx
 *.rtl.md
 .archify/
-.kiro/
 
