@@ -136,7 +136,16 @@ def main() -> None:
             from window_icon_probe import probe
             report['actualNativeWindowIcons'] = probe(output / 'window-icons', title_prefix='MdPersia |')
             assert report['actualNativeWindowIcons']
-            assert all(row.get('large', [0])[0] >= 32 for row in report['actualNativeWindowIcons'])
+            assert all(max(row.get(slot, [0])[0] for slot in ('large', 'small', 'small2')) >= 32
+                       for row in report['actualNativeWindowIcons'])
+            # Tauri can supply ICON_SMALL without setting ICON_BIG. Verify the
+            # actual pixels, rather than treating an unset slot as a blurry icon.
+            from PIL import Image
+            icon = Image.open(Path(__file__).resolve().parents[1] / 'src/fa_md_pdf/assets/mdpersia.ico')
+            actual_icon = Image.open(output / 'window-icons/window-small.png').convert('RGBA')
+            expected_icon = icon.ico.getimage(actual_icon.size).convert('RGBA')
+            assert actual_icon.tobytes() == expected_icon.tobytes()
+            report['nativeWindowIconMatchesSizeSpecificOriginalArtwork'] = True
             sidebar = page.locator('#output-inspector')
             workspace = page.get_by_role('region', name='محیط مطالعه', exact=True)
             assert sidebar.bounding_box()['x'] < workspace.bounding_box()['x'] < page.locator('tbody').bounding_box()['x']

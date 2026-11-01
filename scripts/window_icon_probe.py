@@ -13,6 +13,9 @@ def probe(output=None, title_prefix='MdPersia'):
     user.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
     user.SendMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
     user.SendMessageW.restype = ctypes.c_ssize_t
+    class_icon = user.GetClassLongPtrW if ctypes.sizeof(ctypes.c_void_p) == 8 else user.GetClassLongW
+    class_icon.argtypes = [wintypes.HWND, ctypes.c_int]
+    class_icon.restype = ctypes.c_size_t
     user.GetIconInfo.argtypes = [wintypes.HICON, ctypes.c_void_p]
     gdi.GetObjectW.argtypes = [wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p]
     gdi.DeleteObject.argtypes = [wintypes.HANDLE]
@@ -37,11 +40,17 @@ def probe(output=None, title_prefix='MdPersia'):
         record = {'title': title.value, 'hwnd': hwnd}
         for name, slot in [('large', 1), ('small', 0), ('small2', 2)]:
             icon = user.SendMessageW(hwnd, 0x7F, slot, 0)
+            source = 'WM_GETICON'
+            if not icon:
+                # A window may inherit its class icon instead of setting WM_SETICON.
+                icon = class_icon(hwnd, -14 if name == 'large' else -34)
+                source = 'class'
             info = IconInfo()
             if icon and user.GetIconInfo(icon, ctypes.byref(info)):
                 bitmap = Bitmap()
                 if gdi.GetObjectW(info.color, ctypes.sizeof(bitmap), ctypes.byref(bitmap)):
                     record[name] = [bitmap.width, bitmap.height]
+                    record[name + 'Source'] = source
                     if output:
                         from PIL import Image
                         width, height = bitmap.width, bitmap.height
