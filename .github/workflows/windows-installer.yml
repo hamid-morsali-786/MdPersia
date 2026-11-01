@@ -25,7 +25,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: MdPersia-Windows-x64
-          run-id: 40664741031
+          run-id: 41307780307
           github-token: ${{ secrets.GITHUB_TOKEN }}
           path: output/publish
       - name: Verify the exact accepted Setup
@@ -37,10 +37,10 @@ jobs:
           assert len(files) == 1
           setup = files[0]
           digest = hashlib.sha256(setup.read_bytes()).hexdigest()
-          assert digest == 'd07b235ad93c3a97990a34c52bddc6453690c82592626c2118f9ad50278891f9'
-          assert setup.stat().st_size == 15832533
-          # Match the accepted Windows checksum file byte-for-byte on Linux too.
-          Path('output/publish/SHA256SUMS.txt').write_bytes(f'{digest}  {setup.name}\r\n'.encode('ascii'))
+          assert digest == '7acdfb0870a78d7ef9a38aae61346caa9594daaee20d1c2969b81f5db175c575'
+          assert setup.stat().st_size == 15883751
+          # Match the accepted beta.3 checksum file byte-for-byte on Linux too.
+          Path('output/publish/SHA256SUMS.txt').write_bytes(f'{digest}  {setup.name}\n'.encode('ascii'))
           print(f'Accepted artifact: {setup.name}, {setup.stat().st_size} bytes, SHA-256 {digest}')
           PY
       - name: Upload accepted assets and publish the prepared beta
@@ -57,17 +57,25 @@ jobs:
               req = urllib.request.Request(url, data=data, method=method, headers={
                   'Authorization': 'Bearer ' + os.environ['GH_TOKEN'],
                   'User-Agent': 'MdPersia-release', 'Content-Type': mime})
-              with urllib.request.urlopen(req, timeout=180) as response: return json.load(response)
+              with urllib.request.urlopen(req, timeout=180) as response:
+                  return None if response.status == 204 else json.load(response)
           # Draft releases have no public tag lookup until they are published.
           release = next(r for r in request(base + '/releases')
-                         if r['tag_name'] == 'desktop-v0.3.0-beta.2')
-          assert release['target_commitish'] == 'b919fa9f0c9e6b098c6144e4f7241423600213dc'
+                         if r['tag_name'] == 'desktop-v0.3.0-beta.3')
+          assert release['draft'], 'Never modify an already published release'
+          assert release['target_commitish'] == '1b390311d911bcd6b89df08d79a3171f968dfbaf'
           files = [next(Path('output/publish').rglob('*-setup.exe')),
-                   Path('output/publish/SHA256SUMS.txt'), Path('docs/WINDOWS-ACCEPTANCE.md')]
+                   Path('output/publish/SHA256SUMS.txt'), Path('docs/WINDOWS-ACCEPTANCE-beta3.md'),
+                   next(Path('output/publish').rglob('installer-size.json')),
+                   next(Path('output/publish').rglob('conversion-catalog.json'))]
           for path in files:
               name = 'TEST-REPORT.md' if path.suffix == '.md' else path.name
               payload = path.read_bytes()
               old = next((a for a in release['assets'] if a['name'] == name), None)
+              if old and old['state'] == 'starter':
+                  # GitHub may retain an empty starter after a failed upload.
+                  request(base + '/releases/assets/' + str(old['id']), method='DELETE')
+                  old = None
               if old:
                   assert old['state'] == 'uploaded' and old['digest'] == 'sha256:' + hashlib.sha256(payload).hexdigest()
                   continue
