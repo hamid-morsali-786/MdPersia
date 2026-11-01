@@ -2,12 +2,14 @@ import React, { useEffect } from 'react';
 import { QueueItem, LogEntry } from '../types';
 import { PreviewTab } from './Workspace/PreviewTab';
 import { TerminalTab } from './Workspace/TerminalTab';
-import { Eye, Terminal } from 'lucide-react';
+import { Eye, Terminal, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import type { AppSettings } from '../services/appSettings';
 import type { DocumentEditor } from '../services/useDocumentEditor';
 import type { DocumentSnapshot } from '../services/documents';
 
 interface WorkspacePanelProps {
+  inspectorOpen: boolean;
+  onToggleInspector: () => void;
   selectedItem: QueueItem | null;
   markdownContent?: string;
   logs: LogEntry[];
@@ -49,6 +51,7 @@ export const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
   onOpenDocument,
   readingSettings,
   editor, onSavedCopy,
+  inspectorOpen, onToggleInspector,
 }) => {
   // Surface live process output while a batch runs, then hand control back.
   useEffect(() => {
@@ -94,6 +97,12 @@ export const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
             )}
           </button>
         </div>
+        <button type="button" className="btn px-2 shrink-0 rounded text-muted hover:bg-subtle hover:text-main"
+          onClick={onToggleInspector} aria-expanded={inspectorOpen} aria-controls="output-inspector"
+          aria-label={inspectorOpen ? 'پنهان‌کردن تنظیمات خروجی' : 'نمایش تنظیمات خروجی'}
+          title={inspectorOpen ? 'پنهان‌کردن تنظیمات خروجی' : 'نمایش تنظیمات خروجی'}>
+          {inspectorOpen ? <PanelLeftClose className="w-4 h-4" /> : <PanelLeftOpen className="w-4 h-4" />}
+        </button>
       </div>
 
       <div className="flex-1 overflow-hidden">

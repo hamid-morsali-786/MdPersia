@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mdpersia"
-version = "0.3.0b2"
+version = "0.3.0b3"
 description = "The modern, offline-first Persian and RTL Markdown to Word (DOCX) & PDF converter with native Mermaid support."
 readme = "README.md"
 requires-python = ">=3.11"

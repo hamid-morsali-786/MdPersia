@@ -1,3 +1,5 @@
+import { previewStyles } from './src/services/previewStyles';
+import { DEFAULT_APP_SETTINGS } from './src/services/appSettings';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -316,6 +318,10 @@ export function installDesktopBridge(server: BridgeServer, production = false) {
   server.middlewares.use('/mdpersia.svg', (_req, res) => {
     res.setHeader('Content-Type', 'image/svg+xml');
     fs.createReadStream(path.join(projectRoot, 'src', 'fa_md_pdf', 'assets', 'mdpersia.svg')).pipe(res);
+  });
+  server.middlewares.use('/mdpersia.ico', (_req, res) => {
+    res.setHeader('Content-Type', 'image/x-icon');
+    fs.createReadStream(path.join(projectRoot, 'src', 'fa_md_pdf', 'assets', 'mdpersia.ico')).pipe(res);
   });
 
   // Bundled fonts, served with CORS + cache headers for the preview iframe.
@@ -649,21 +655,8 @@ export function installDesktopBridge(server: BridgeServer, production = false) {
         'ul[dir="ltr"], ol[dir="ltr"] { padding-inline-start: 1.6em !important; padding-inline-end: 0 !important; direction: ltr !important; }',
         '</style>',
       ].join('\n');
-      const dark = [
-        '<style>',
-        'body, .markdown-body { background-color: #121214 !important; color: #e4e4e7 !important; }',
-        'h1,h2,h3,h4,h5,h6 { color: #fafafa !important; border-bottom-color: #27272a !important; }',
-        'code { background: #27272a !important; color: #f43f5e !important; }',
-        'pre { background: #18181b !important; border-color: #27272a !important; }',
-        'table th { background: #1f1f23 !important; color: #f4f4f5 !important; border-color: #27272a !important; }',
-        'table td { border-color: #27272a !important; background: #121214 !important; color: #e4e4e7 !important; }',
-        'blockquote { border-inline-start-color: #3f3f46 !important; background: #1e1e24 !important; color: #d4d4d8 !important; }',
-        '.mermaid { filter: invert(0.88) hue-rotate(180deg); }',
-        '</style>',
-      ].join('\n');
-
       let out = rewriteLocalUrls(html);
-      out = out.replace('</head>', shell + (theme === 'dark' ? dark : '') + '</head>');
+      out = out.replace('</head>', shell + '<style>' + previewStyles(theme, zoom, DEFAULT_APP_SETTINGS) + '</style></head>');
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       res.setHeader('Cache-Control', 'no-store');
       res.end(out);

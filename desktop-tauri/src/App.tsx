@@ -83,11 +83,26 @@ export const App: React.FC = () => {
   }, []);
 
   const [queueWidth, setQueueWidth] = useState<number>(() =>
-    storedWidth('pane_queue_width_v2', queueDefault(), QUEUE_MIN, QUEUE_MAX)
+    storedWidth('pane_queue_width_v2', queueDefault(), QUEUE_MIN, Math.max(QUEUE_MIN, Math.min(QUEUE_MAX, window.innerWidth - INSPECTOR_MIN - 336)))
   );
   const [inspectorWidth, setInspectorWidth] = useState<number>(() =>
-    storedWidth('pane_inspector_width', inspectorDefault(), INSPECTOR_MIN, INSPECTOR_MAX)
+    storedWidth('pane_inspector_width', inspectorDefault(), INSPECTOR_MIN, Math.max(INSPECTOR_MIN, Math.min(INSPECTOR_MAX, window.innerWidth - queueWidth - 336)))
   );
+
+  const [inspectorCollapsed, setInspectorCollapsed] = useState(() => {
+    try { return localStorage.getItem('pane_inspector_collapsed') === '1'; } catch { return false; }
+  });
+  useEffect(() => storeWidth('pane_inspector_collapsed', inspectorCollapsed ? 1 : 0), [inspectorCollapsed]);
+  useEffect(() => {
+    const fit = () => {
+      const queue = Math.min(queueWidth, Math.max(QUEUE_MIN, window.innerWidth - (inspectorCollapsed ? 0 : INSPECTOR_MIN) - 336));
+      setQueueWidth(queue);
+      setInspectorWidth(previous => Math.max(INSPECTOR_MIN, Math.min(previous, window.innerWidth - queue - 336)));
+    };
+    window.addEventListener('resize', fit);
+    return () => window.removeEventListener('resize', fit);
+  }, [queueWidth, inspectorCollapsed]);
+
 
   const [items, setItems] = useState<QueueItem[]>([]);
   const [activeFolder, setActiveFolder] = useState<string | null>(null);
@@ -272,19 +287,27 @@ export const App: React.FC = () => {
 
   const handleResizeQueue = useCallback((delta: number) => {
     setQueueWidth((prev) => {
-      const next = clamp(prev + delta, QUEUE_MIN, QUEUE_MAX);
+      const limit = Math.max(QUEUE_MIN, Math.min(QUEUE_MAX, window.innerWidth - (inspectorCollapsed ? 0 : inspectorWidth) - 336));
+      const next = clamp(prev + delta, QUEUE_MIN, limit);
       storeWidth('pane_queue_width_v2', next);
       return next;
     });
-  }, []);
+  }, [inspectorCollapsed, inspectorWidth]);
 
-  const handleResizeInspector = useCallback((delta: number) => {
-    setInspectorWidth((prev) => {
-      const next = clamp(prev + delta, INSPECTOR_MIN, INSPECTOR_MAX);
-      storeWidth('pane_inspector_width', next);
-      return next;
-    });
-  }, []);
+  const handleResizeInspector = (delta: number) => {
+    const maximum = Math.max(INSPECTOR_MIN, Math.min(INSPECTOR_MAX, window.innerWidth - queueWidth - 336));
+    setInspectorWidth(previous => clamp((inspectorCollapsed ? 0 : previous) + delta, 0, maximum));
+    if (delta > 0) setInspectorCollapsed(false);
+  };
+  const finishResizeInspector = () => {
+    if (inspectorWidth < 100) {
+      setInspectorCollapsed(true);
+      setInspectorWidth(storedWidth('pane_inspector_width', inspectorDefault(), INSPECTOR_MIN, INSPECTOR_MAX));
+    } else {
+      const next = Math.max(INSPECTOR_MIN, inspectorWidth);
+      setInspectorWidth(next); storeWidth('pane_inspector_width', next);
+    }
+  };
 
   const handleOptionChange = <K extends keyof ConvertOptions>(
     key: K,
@@ -747,6 +770,7 @@ export const App: React.FC = () => {
         <SettingsDialog settings={settings} format={options.format} isRunning={isRunning} storageError={storageError} notice={settingsNotice} conversionRuntime={conversionRuntime}
           onChange={changeSettings} onFormatChange={format => { handleOptionChange('format', format); setSettingsNotice(''); }} onClose={() => setSettingsOpen(false)}
           onResetLayout={() => {
+            setInspectorCollapsed(false);
             setQueueWidth(queueDefault()); setInspectorWidth(inspectorDefault());
             storeWidth('pane_queue_width_v2', queueDefault()); storeWidth('pane_inspector_width', inspectorDefault());
             setSettingsNotice('عرض پنل‌ها به حالت اولیه برگشت.');
@@ -792,6 +816,7 @@ export const App: React.FC = () => {
 
         <PaneSplitter
           onResize={handleResizeQueue}
+          value={queueWidth} min={QUEUE_MIN} max={QUEUE_MAX}
           onReset={() => {
             const w = queueDefault();
             setQueueWidth(w);
@@ -800,43 +825,11 @@ export const App: React.FC = () => {
           title="تغییر عرض ستون صف (بکشید / دوبار کلیک برای ریست)"
         />
 
-        {/* Zone B: Parameters Inspector (Middle in RTL) */}
-        <section
-          style={{ width: `${inspectorWidth}px` }}
-          className="h-full shrink-0 overflow-hidden"
-        >
-          <InspectorPanel
-            options={options}
-            isRunning={isRunning}
-            isWatching={isWatching}
-            hasDocuments={items.length > 0}
-            outputDirBusy={nativeBusy === 'output-dir'}
-            onOptionsChange={(key, value) => {
-              if (key === 'recursive') handleRecursiveToggle(Boolean(value));
-              else handleOptionChange(key, value);
-            }}
-            onConvert={handleConvert}
-            onCancel={handleCancel}
-            onBrowseOutputDir={handleBrowseOutputDir}
-            onOpenOutputDir={handleOpenOutputDir}
-            onBrowseFile={handleBrowseFile}
-            onBrowseDir={handleBrowseDir}
-          />
-        </section>
-
-        <PaneSplitter
-          onResize={handleResizeInspector}
-          onReset={() => {
-            const w = inspectorDefault();
-            setInspectorWidth(w);
-            storeWidth('pane_inspector_width', w);
-          }}
-          title="تغییر عرض پنل تنظیمات (بکشید / دوبار کلیک برای ریست)"
-        />
-
-        {/* Zone C: Workspace Preview & Terminal (Left-most in RTL) */}
-        <section className="flex-1 min-w-[320px] h-full overflow-hidden">
+        {/* Workspace Preview & Terminal (center) */}
+        <section aria-label="محیط مطالعه" className="flex-1 min-w-0 h-full overflow-hidden">
           <WorkspacePanel
+            inspectorOpen={!inspectorCollapsed}
+            onToggleInspector={() => setInspectorCollapsed(value => !value)}
             selectedItem={selectedItem}
             markdownContent={markdownContent}
             logs={logs}
@@ -862,6 +855,46 @@ export const App: React.FC = () => {
             onOpenDocument={(path) => loadDocuments(path, true)}
           />
         </section>
+        <PaneSplitter
+          onResize={handleResizeInspector}
+          value={inspectorCollapsed ? 0 : inspectorWidth} min={0} max={INSPECTOR_MAX}
+          growTowards="right"
+          onResizeEnd={finishResizeInspector}
+          onReset={() => {
+            setInspectorCollapsed(false);
+            const w = inspectorDefault();
+            setInspectorWidth(w);
+            storeWidth('pane_inspector_width', w);
+          }}
+          title="تغییر عرض پنل تنظیمات (بکشید / دوبار کلیک برای ریست)"
+        />
+
+        {/* Output Inspector (left) */}
+        <section
+          id="output-inspector" aria-label="تنظیمات خروجی" inert={inspectorCollapsed}
+          style={{ width: inspectorCollapsed ? 0 : `${inspectorWidth}px` }}
+          className="h-full shrink-0 overflow-hidden"
+        >
+          <InspectorPanel
+            onClose={() => setInspectorCollapsed(true)}
+            options={options}
+            isRunning={isRunning}
+            isWatching={isWatching}
+            hasDocuments={items.length > 0}
+            outputDirBusy={nativeBusy === 'output-dir'}
+            onOptionsChange={(key, value) => {
+              if (key === 'recursive') handleRecursiveToggle(Boolean(value));
+              else handleOptionChange(key, value);
+            }}
+            onConvert={handleConvert}
+            onCancel={handleCancel}
+            onBrowseOutputDir={handleBrowseOutputDir}
+            onOpenOutputDir={handleOpenOutputDir}
+            onBrowseFile={handleBrowseFile}
+            onBrowseDir={handleBrowseDir}
+          />
+        </section>
+
       </main>
 
       <StatusBar

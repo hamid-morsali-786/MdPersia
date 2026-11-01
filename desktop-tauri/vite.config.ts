@@ -36,6 +36,7 @@ function windowsNativePlugin(): Plugin {
         }
       }
       fs.copyFileSync(path.join(projectRoot, 'src', 'fa_md_pdf', 'assets', 'mdpersia.svg'), path.resolve(__dirname, 'dist', 'mdpersia.svg'));
+      fs.copyFileSync(path.join(projectRoot, 'src', 'fa_md_pdf', 'assets', 'mdpersia.ico'), path.resolve(__dirname, 'dist', 'mdpersia.ico'));
       const { build } = await import('esbuild');
       await build({ entryPoints: [path.resolve(__dirname, 'desktop-server.ts')], outfile: path.resolve(__dirname, 'dist', 'desktop-server.mjs'), bundle: true, platform: 'node', format: 'esm', target: 'node18' });
       fs.writeFileSync(path.resolve(__dirname, 'dist', '.mdpersia-build'), 'MdPersia desktop build\n');

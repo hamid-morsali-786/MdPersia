@@ -1,3 +1,4 @@
+import { previewStyles } from './previewStyles';
 import { QueueItem, ConvertOptions, LogEntry, ProgressEvent } from '../types';
 import { buildCliArgs } from './cliTranslator';
 import { DEFAULT_APP_SETTINGS, type ReadingSettings } from './appSettings';
@@ -562,29 +563,7 @@ function viewerShellCss(zoom: number, theme: string, reading: ReadingSettings = 
         `@font-face { font-family: "Vazirmatn"; src: url("${window.location.origin}/fonts/Vazirmatn-${name}.ttf") format("truetype"); font-weight: ${weight}; font-style: normal; font-display: swap; }`
     )
     .join('\n');
-  const dark =
-    theme === 'dark'
-      ? `body, .markdown-body { background-color: #121214 !important; color: #e4e4e7 !important; }
-         h1,h2,h3,h4,h5,h6 { color: #fafafa !important; border-bottom-color: #27272a !important; }
-         code { background: #27272a !important; color: #f43f5e !important; }
-         pre { background: #18181b !important; border-color: #27272a !important; }
-         table th { background: #1f1f23 !important; color: #f4f4f5 !important; border-color: #27272a !important; }
-         table td { background: #121214 !important; color: #e4e4e7 !important; border-color: #27272a !important; }
-         blockquote { background: #1e1e24 !important; color: #d4d4d8 !important; }
-         .mermaid { filter: invert(0.88) hue-rotate(180deg); }`
-      : '';
-  return `<style>${faces}
-    html { zoom: ${zoom}%; }
-    html, body { margin: 0; padding: 0; }
-    .markdown-body { padding: 36px 44px !important; max-width: ${reading.readingWidth === 'wide' ? 'none' : '860px'} !important;
-      line-height: ${reading.lineHeight} !important;
-      margin: 0 auto !important; box-sizing: border-box !important; min-height: 100vh; }
-    .markdown-body p, .markdown-body li { line-height: inherit !important; }
-    .markdown-body pre { white-space: ${reading.wrapCode ? 'pre-wrap' : 'pre'} !important;
-      overflow-wrap: ${reading.wrapCode ? 'anywhere' : 'normal'} !important; overflow-x: auto !important; }
-    .markdown-body pre code { white-space: inherit !important; overflow-wrap: inherit !important; }
-    img { max-width: 100%; height: auto; }
-    ${dark}</style>`;
+  return `<style>${faces}\n${previewStyles(theme, zoom, reading)}</style>`;
 }
 
 /** Theme and zoom change the current iframe; no Python process or Mermaid reload. */
