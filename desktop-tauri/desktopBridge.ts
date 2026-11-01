@@ -323,6 +323,10 @@ export function installDesktopBridge(server: BridgeServer, production = false) {
     res.setHeader('Content-Type', 'image/x-icon');
     fs.createReadStream(path.join(projectRoot, 'src', 'fa_md_pdf', 'assets', 'mdpersia.ico')).pipe(res);
   });
+  server.middlewares.use('/mdpersia.png', (_req, res) => {
+    res.setHeader('Content-Type', 'image/png');
+    fs.createReadStream(path.join(projectRoot, 'src', 'fa_md_pdf', 'assets', 'mdpersia.png')).pipe(res);
+  });
 
   // Bundled fonts, served with CORS + cache headers for the preview iframe.
   server.middlewares.use('/fonts', (req, res, next) => {

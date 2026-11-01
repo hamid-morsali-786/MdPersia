@@ -70,7 +70,7 @@ def main():
         assert workspace.bounding_box()['x'] < page.locator('tbody').bounding_box()['x']
         page.screenshot(path=str(output / 'layout-open.png'), animations='disabled')
         report['workspaceCenteredAndOutputOnLeft'] = True
-        page.get_by_role('button', name='بستن تنظیمات خروجی', exact=True).click()
+        page.get_by_role('button', name='پنهان‌کردن تنظیمات خروجی', exact=True).click()
         expect(page.get_by_role('button', name='نمایش تنظیمات خروجی', exact=True)).to_be_visible()
         assert page.locator('#output-inspector').bounding_box()['width'] == 0
         assert page.locator('#output-inspector').evaluate('el=>el.inert')
@@ -86,17 +86,23 @@ def main():
         box = separator.bounding_box()
         page.mouse.move(box['x'] + box['width'] / 2, box['y'] + 200)
         page.mouse.down()
-        page.mouse.move(5, box['y'] + 200, steps=24)
+        page.mouse.move(250, box['y'] + 200, steps=10)
+        assert page.locator('#output-inspector').bounding_box()['width'] >= 300
+        page.mouse.move(120, box['y'] + 200, steps=10)
+        assert page.locator('#output-inspector').bounding_box()['width'] == 0
+        page.mouse.move(5, box['y'] + 200, steps=4)
         page.mouse.up()
         expect(page.get_by_role('button', name='نمایش تنظیمات خروجی', exact=True)).to_be_visible()
         report['dragToLeftEdgeFullyCloses'] = True
+        report['sidebarNeverRendersSquashedControlsDuringDrag'] = True
+        assert page.get_by_role('button', name='نمایش تنظیمات خروجی', exact=True).count() == 1
         # The separator stays mounted at the edge, so dragging right can reopen it.
         box = separator.bounding_box()
         page.mouse.move(box['x'] + box['width'] / 2, box['y'] + 200)
         page.mouse.down()
         page.mouse.move(330, box['y'] + 200, steps=20)
         page.mouse.up()
-        expect(page.get_by_role('button', name='بستن تنظیمات خروجی', exact=True)).to_be_visible()
+        expect(page.get_by_role('button', name='پنهان‌کردن تنظیمات خروجی', exact=True)).to_be_visible()
         report['dragRightFromEdgeReopens'] = True
         # Test capture loss while the pointer is still held, not just normal mouseup.
         box = separator.bounding_box()
@@ -115,6 +121,14 @@ def main():
         page.mouse.up()
         expect(page.locator('iframe')).to_have_css('pointer-events', 'auto')
         report['windowBlurRestoresPreviewInput'] = True
+        separator.focus()
+        page.keyboard.press('Home')
+        before_width = page.locator('#output-inspector').bounding_box()['width']
+        page.keyboard.press('ArrowLeft')
+        assert page.locator('#output-inspector').bounding_box()['width'] < before_width
+        page.keyboard.press('ArrowRight')
+        assert page.locator('#output-inspector').bounding_box()['width'] == before_width
+        report['keyboardResizeAndReset'] = True
         for width in (1024, 1280, 1920, 1440):
             page.set_viewport_size({'width': width, 'height': 900})
             page.wait_for_function("()=>[...document.querySelectorAll('section')].find(el=>el.getAttribute('aria-label')==='محیط مطالعه').getBoundingClientRect().width>=320")

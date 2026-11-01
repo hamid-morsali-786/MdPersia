@@ -34,10 +34,16 @@ export const PaneSplitter: React.FC<PaneSplitterProps> = ({
   }, []);
   useEffect(() => {
     window.addEventListener('blur', finish);
+    window.addEventListener('pointerup', finish, true);
+    window.addEventListener('pointercancel', finish, true);
+    window.addEventListener('lostpointercapture', finish, true);
     const visibility = () => { if (document.hidden) finish(); };
     document.addEventListener('visibilitychange', visibility);
     return () => {
       window.removeEventListener('blur', finish);
+      window.removeEventListener('pointerup', finish, true);
+      window.removeEventListener('pointercancel', finish, true);
+      window.removeEventListener('lostpointercapture', finish, true);
       document.removeEventListener('visibilitychange', visibility);
       restore.current?.();
     };
@@ -47,6 +53,7 @@ export const PaneSplitter: React.FC<PaneSplitterProps> = ({
     if (e.button !== 0) return;
     e.preventDefault();
     e.stopPropagation();
+    finish();
 
     lastXRef.current = e.clientX;
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);

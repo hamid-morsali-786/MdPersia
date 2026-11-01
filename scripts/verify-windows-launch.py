@@ -56,6 +56,9 @@ def main() -> None:
         pages = [page for context in browser.contexts for page in context.pages if f":{port}" in page.url]
         assert len(pages) == 1, [page.url for context in browser.contexts for page in context.pages]
         page = pages[0]
+        page.wait_for_timeout(1000)
+        from window_icon_probe import probe
+        print(json.dumps({'actualWindowIcons': probe(output / 'window-icons')}), flush=True)
         frame = page.frame_locator("iframe")
         expect(frame.locator('.markdown-body')).to_be_visible()
         expect(page.get_by_text('در حال رندر پیش‌نمایش…', exact=True)).to_be_hidden()

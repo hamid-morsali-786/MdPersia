@@ -1,7 +1,7 @@
 """Build crisp, size-specific monochrome Windows icons from vector geometry.
 
-Pillow is a build-only dependency. Small taskbar/titlebar frames use wider
-strokes and a simpler RTL arrow instead of shrinking a detailed document.
+Pillow is a build-only dependency. Preserve the original document/MD/RTL mark. Small frames use hinted strokes;
+large PNG frames are available for browser app windows and high-DPI taskbars.
 """
 from io import BytesIO
 from pathlib import Path
@@ -22,13 +22,17 @@ def render(size):
         return [(round(x * factor), round(y * factor)) for x, y in values]
     def line(values, width, color='white'):
         draw.line(pts(values), fill=color, width=round(width * factor), joint='curve')
-    draw.rounded_rectangle(pts([(12, 12), (244, 244)]), radius=round(40 * factor),
-                           fill='#111111', outline='white', width=max(1, round(6 * factor)))
-    weight = 18 if size <= 24 else 15
-    line([(48, 155), (48, 78), (82, 122), (116, 78), (116, 155)], weight)
-    line([(146, 78), (146, 155), (175, 155), (204, 137), (204, 96), (175, 78), (146, 78)], weight)
-    line([(202, 196), (57, 196), (79, 176)], 14 if size <= 24 else 12)
-    line([(57, 196), (79, 216)], 14 if size <= 24 else 12)
+    draw.polygon(pts([(48,16),(160,16),(208,64),(208,240),(40,240),(40,16)]), fill='white')
+    line([(48,16),(160,16),(208,64),(208,240),(40,240),(40,16),(48,16)],12,'#111111')
+    line([(156,18),(156,70),(206,70)],10,'#111111')
+    weight = 14 if size <= 24 else 12
+    line([(66,150),(66,102),(90,132),(114,102),(114,150)],weight,'#111111')
+    line([(136,150),(136,102),(151,102)],weight,'#111111')
+    draw.arc(tuple(round(v * factor) for v in (127,102,175,150)), -90,90,fill='#111111',width=round(weight*factor))
+    line([(151,150),(136,150)],weight,'#111111')
+    draw.rounded_rectangle(pts([(60,174),(188,218)]),radius=round(8*factor),fill='#111111')
+    line([(161,196),(88,196),(103,185)],8)
+    line([(88,196),(103,207)],8)
     return image.resize((size, size), Image.Resampling.LANCZOS)
 
 
@@ -45,13 +49,7 @@ def main():
         headers.append(struct.pack('<BBBBHHII', size % 256, size % 256, 0, 0, 1, 32, len(data), offset))
         offset += len(data)
     (ASSETS / 'mdpersia.ico').write_bytes(struct.pack('<HHH', 0, 1, len(frames)) + b''.join(headers) + b''.join(data for _, data in frames))
-    (ASSETS / 'mdpersia.svg').write_text('''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none">
-  <rect x="12" y="12" width="232" height="232" rx="40" fill="#111" stroke="#fff" stroke-width="6"/>
-  <path d="M48 155V78l34 44 34-44v77M146 78v77h29l29-18V96l-29-18h-29Z" stroke="#fff" stroke-width="15" stroke-linejoin="round"/>
-  <path d="M202 196H57l22-20m-22 20 22 20" stroke="#fff" stroke-width="12" stroke-linejoin="round"/>
-</svg>
-''', encoding='utf-8')
-    print('Generated 512px PNG, SVG and 9 independently rasterized Windows ICO frames.')
+    print('Generated 512px PNG and 9 Windows frames; original SVG identity preserved.')
 
 
 if __name__ == '__main__':

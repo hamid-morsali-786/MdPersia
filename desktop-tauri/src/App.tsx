@@ -294,19 +294,34 @@ export const App: React.FC = () => {
     });
   }, [inspectorCollapsed, inspectorWidth]);
 
+  const inspectorDragWidth = useRef<number | null>(null);
   const handleResizeInspector = (delta: number) => {
     const maximum = Math.max(INSPECTOR_MIN, Math.min(INSPECTOR_MAX, window.innerWidth - queueWidth - 336));
-    setInspectorWidth(previous => clamp((inspectorCollapsed ? 0 : previous) + delta, 0, maximum));
-    if (delta > 0) setInspectorCollapsed(false);
+    const raw = clamp((inspectorDragWidth.current ?? (inspectorCollapsed ? 0 : inspectorWidth)) + delta, 0, maximum);
+    inspectorDragWidth.current = raw;
+    // Track the pointer independently of the visible width. Never render the
+    // inspector controls squeezed between zero and their usable minimum.
+    setInspectorCollapsed(raw < INSPECTOR_MIN / 2);
+    if (raw >= INSPECTOR_MIN / 2) setInspectorWidth(Math.max(INSPECTOR_MIN, raw));
   };
   const finishResizeInspector = () => {
-    if (inspectorWidth < 100) {
+    const raw = inspectorDragWidth.current;
+    inspectorDragWidth.current = null;
+    if (raw === null) return;
+    if (raw < INSPECTOR_MIN / 2) {
       setInspectorCollapsed(true);
       setInspectorWidth(storedWidth('pane_inspector_width', inspectorDefault(), INSPECTOR_MIN, INSPECTOR_MAX));
     } else {
-      const next = Math.max(INSPECTOR_MIN, inspectorWidth);
+      const next = Math.max(INSPECTOR_MIN, raw);
       setInspectorWidth(next); storeWidth('pane_inspector_width', next);
     }
+  };
+  const toggleInspector = () => {
+    if (inspectorCollapsed) {
+      const maximum = Math.max(INSPECTOR_MIN, Math.min(INSPECTOR_MAX, window.innerWidth - queueWidth - 336));
+      setInspectorWidth(previous => clamp(previous, INSPECTOR_MIN, maximum));
+    }
+    setInspectorCollapsed(previous => !previous);
   };
 
   const handleOptionChange = <K extends keyof ConvertOptions>(
@@ -829,7 +844,7 @@ export const App: React.FC = () => {
         <section aria-label="محیط مطالعه" className="flex-1 min-w-0 h-full overflow-hidden">
           <WorkspacePanel
             inspectorOpen={!inspectorCollapsed}
-            onToggleInspector={() => setInspectorCollapsed(value => !value)}
+            onToggleInspector={toggleInspector}
             selectedItem={selectedItem}
             markdownContent={markdownContent}
             logs={logs}
@@ -862,7 +877,7 @@ export const App: React.FC = () => {
           onResizeEnd={finishResizeInspector}
           onReset={() => {
             setInspectorCollapsed(false);
-            const w = inspectorDefault();
+            const w = Math.min(inspectorDefault(), Math.max(INSPECTOR_MIN, window.innerWidth - queueWidth - 336));
             setInspectorWidth(w);
             storeWidth('pane_inspector_width', w);
           }}
@@ -876,7 +891,6 @@ export const App: React.FC = () => {
           className="h-full shrink-0 overflow-hidden"
         >
           <InspectorPanel
-            onClose={() => setInspectorCollapsed(true)}
             options={options}
             isRunning={isRunning}
             isWatching={isWatching}

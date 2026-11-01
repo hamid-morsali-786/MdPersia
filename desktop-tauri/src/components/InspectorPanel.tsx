@@ -17,12 +17,10 @@ import {
   SlidersHorizontal,
   Loader2,
   ExternalLink,
-  PanelLeftClose,
 } from 'lucide-react';
 import { Tooltip } from './Tooltip';
 
 interface InspectorPanelProps {
-  onClose?: () => void;
   options: ConvertOptions;
   isRunning: boolean;
   isWatching: boolean;
@@ -61,7 +59,6 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
   onOpenOutputDir,
   onBrowseFile,
   onBrowseDir,
-  onClose,
 }) => {
   const [activeTab, setActiveTab] = useState<TabKey>('doc');
 
@@ -72,13 +69,11 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
   ];
 
   return (
-    <div className="flex flex-col h-full bg-card border-l border-main transition-colors duration-200">
+    <div className="flex flex-col h-full min-w-[300px] bg-card border-l border-main transition-colors duration-200">
       {/* Top Controls: Format & Output Directory */}
       <div className="p-4 border-b border-main space-y-3 bg-surface transition-colors">
         <div>
-          <div className="flex items-center justify-between mb-2"><label className="block text-xs font-semibold text-main">فرمت خروجی</label>
-            <button type="button" onClick={onClose} aria-label="بستن تنظیمات خروجی" className="btn p-1.5 rounded text-muted hover:bg-subtle hover:text-main"><PanelLeftClose className="w-4 h-4" /></button>
-          </div>
+          <label className="block text-xs font-semibold text-main mb-2">فرمت خروجی</label>
           <div className="grid grid-cols-3 gap-1.5 p-1 bg-subtle rounded-lg border border-main">
             {FORMATS.map((f) => (
               <button

@@ -82,6 +82,8 @@ def main() -> None:
     for key in ('PYTHONHOME', 'PYTHONPATH', 'PLAYWRIGHT_BROWSERS_PATH'):
         env.pop(key, None)
     original = '# سند نخست\r\n\r\n- Host: localhost برای اتصال\r\n\r\nEnglish Solver: example.\r\n\r\n![local](local-image.png)\r\n\r\n```mermaid\r\ngraph LR\r\nA[شروع]-->B[پایان]\r\n```\r\n'
+    original += '\r\n```python\r\ndef solve(value):\r\n    return {"result": value, "count": 42}\r\n```\r\n'
+    original += '\r\n\r\nمتن برای آزمون پیمایش پیش‌نمایش.' * 30
     first, second, third = [output / name for name in ('فایل نخست.md', 'second.markdown', 'third.md')]
     first.write_bytes(original.encode('utf-8-sig'))
     second.write_text('# سند دوم\n\nمتن دوم.', encoding='utf-8')
@@ -131,6 +133,33 @@ def main() -> None:
             assert frame.locator('img').evaluate('(el)=>el.complete && el.naturalWidth>0')
             assert frame.locator('body').evaluate('async()=>{await document.fonts.ready;return document.fonts.check("16px Vazirmatn")}')
             report['nativePreviewWithLocalImageFontAndMermaid'] = True
+            from window_icon_probe import probe
+            report['actualNativeWindowIcons'] = probe(output / 'window-icons', title_prefix='MdPersia |')
+            assert report['actualNativeWindowIcons']
+            assert all(row.get('large', [0])[0] >= 32 for row in report['actualNativeWindowIcons'])
+            sidebar = page.locator('#output-inspector')
+            workspace = page.get_by_role('region', name='محیط مطالعه', exact=True)
+            assert sidebar.bounding_box()['x'] < workspace.bounding_box()['x'] < page.locator('tbody').bounding_box()['x']
+            page.get_by_role('button', name='پنهان‌کردن تنظیمات خروجی', exact=True).click()
+            assert sidebar.bounding_box()['width'] == 0
+            page.get_by_role('button', name='نمایش تنظیمات خروجی', exact=True).click()
+            separator = page.get_by_role('separator', name='تغییر عرض پنل تنظیمات', exact=False)
+            box = separator.bounding_box()
+            page.mouse.move(box['x'] + box['width'] / 2, box['y'] + 200)
+            page.mouse.down()
+            page.evaluate('window.dispatchEvent(new Event("blur"))')
+            page.mouse.up()
+            expect(page.locator('iframe')).to_have_css('pointer-events', 'auto')
+            inner = page.locator('iframe').element_handle().content_frame()
+            frame_box = page.locator('iframe').bounding_box()
+            page.mouse.move(frame_box['x'] + 100, frame_box['y'] + 200)
+            page.mouse.wheel(0, 600)
+            inner.wait_for_function('()=>window.scrollY>100')
+            assert frame.locator('.mermaid').evaluate('el=>getComputedStyle(el).filter') == 'none'
+            assert frame.locator('pre:not(.mermaid) code').evaluate('el=>getComputedStyle(el).backgroundColor') == 'rgba(0, 0, 0, 0)'
+            inner.evaluate('window.scrollTo(0,0)')
+            page.screenshot(path=str(output / 'native-reading-layout.png'))
+            report['nativeCenteredLayoutSidebarAndScrollAfterInterruptedDrag'] = True
             runtime = page.evaluate('window.__TAURI_INTERNALS__.invoke("conversion_runtime_status")')
             runtime_directory = Path(runtime['directory'].removeprefix('\\\\?\\'))
             def application_processes():
