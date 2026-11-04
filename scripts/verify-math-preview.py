@@ -1,5 +1,6 @@
 """Exercise actual frozen reader and native MathML preview, with offline networking."""
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -15,11 +16,13 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('app', type=Path)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--document', type=Path)
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
     out = args.output.resolve()
     out.mkdir(parents=True, exist_ok=True)
-    fixture = root / 'tests/fixtures/math-bilingual.md'
+    fixture = args.document.resolve() if args.document else root / 'tests/fixtures/math-bilingual.md'
+    original_hash = hashlib.sha256(fixture.read_bytes()).hexdigest()
     with socket.socket() as sock:
         sock.bind(('127.0.0.1', 0))
         port = sock.getsockname()[1]
@@ -42,11 +45,12 @@ def main():
             page = browser.contexts[0].pages[0]
             page.on('pageerror', lambda e: errors.append(str(e)))
             frame = page.frame_locator('iframe')
-            frame.locator('math').nth(9).wait_for()
+            frame.locator('math').first.wait_for()
             browser.contexts[0].set_offline(True)
-            assert frame.locator('math').count() == 10
-            assert frame.locator('mfrac').count() == 8
-            assert frame.locator('menclose').count() == 3
+            counts = {name: frame.locator(tag).count() for name, tag in
+                      [('equations', 'math'), ('fractions', 'mfrac'), ('boxedResults', 'menclose')]}
+            if not args.document:
+                assert counts == {'equations': 10, 'fractions': 8, 'boxedResults': 3}
             assert frame.locator('.math-error').count() == 0
             assert frame.locator('math').first.evaluate('e=>getComputedStyle(e).direction') == 'ltr'
             # Hide optional output controls to give equations the normal reading width.
@@ -58,7 +62,7 @@ def main():
                 dialog = page.get_by_role('dialog', name='تنظیمات برنامه', exact=True)
                 dialog.get_by_label(mode, exact=True).check()
                 dialog.get_by_role('button', name='تمام', exact=True).click()
-                frame.locator('math').nth(9).wait_for()
+                frame.locator('math').first.wait_for()
                 frame.locator('h1').scroll_into_view_if_needed()
                 page.screenshot(path=str(out / ('dark.png' if mode == 'تاریک' else 'light.png')))
                 assert frame.locator('mfrac').first.bounding_box()['height'] > 25
@@ -70,8 +74,10 @@ def main():
     finally:
         if proc.poll() is None:
             subprocess.run(['taskkill', '/PID', str(proc.pid), '/T', '/F'], capture_output=True)
+    assert hashlib.sha256(fixture.read_bytes()).hexdigest() == original_hash
     report = {'actualNativeApp': True, 'offline': True, 'restrictedPath': env['PATH'],
-              'equations': 10, 'fractions': 8, 'boxedResults': 3, 'pageErrors': errors}
+              **counts, 'pageErrors': errors, 'documentUnchanged': True,
+              'document': str(fixture)}
     (out / 'report.json').write_text(json.dumps(report, indent=2))
     print(json.dumps(report, indent=2))
 
