@@ -36,18 +36,28 @@ def normalized_text(text: str) -> str:
     return text.replace("\r\n", "\n").replace("\r", "\n")
 
 
+BOM_ENCODINGS = {name: "\ufeff".encode(name) for name in
+                 ("utf-32-le", "utf-32-be", "utf-16-le", "utf-16-be")}
+
+
+def decode_markdown(raw: bytes) -> tuple[str, str]:
+    for encoding, marker in BOM_ENCODINGS.items():
+        if raw.startswith(marker):
+            return raw[len(marker):].decode(encoding), encoding
+    encoding = "utf-8-sig" if raw.startswith(b"\xef\xbb\xbf") else "utf-8"
+    try:
+        return raw.decode(encoding), encoding
+    except UnicodeDecodeError:
+        return raw.decode("cp1256"), "cp1256"
+
+
 def snapshot(source: Path, raw: bytes) -> dict:
     if len(raw) > MAX_DOCUMENT_BYTES:
         raise DocumentError("TOO_LARGE", "حداکثر حجم سند برای ویرایش ۱۶ مگابایت است.")
-    encoding = "utf-8-sig" if raw.startswith(b"\xef\xbb\xbf") else "utf-8"
     try:
-        text = raw.decode(encoding)
-    except UnicodeDecodeError:
-        encoding = "cp1256"
-        try:
-            text = raw.decode(encoding)
-        except UnicodeDecodeError as error:
-            raise DocumentError("ENCODING", "رمزگذاری فایل قابل تشخیص نیست؛ اصل فایل تغییر نکرده است.") from error
+        text, encoding = decode_markdown(raw)
+    except UnicodeDecodeError as error:
+        raise DocumentError("ENCODING", "رمزگذاری فایل قابل تشخیص نیست؛ اصل فایل تغییر نکرده است.") from error
     endings = re.findall(r"\r\n|\r|\n", text)
     newline = max(dict.fromkeys(endings), key=endings.count) if endings else "\n"
     return {"path": str(source), "text": normalized_text(text), "revision": hashlib.sha256(raw).hexdigest(),
@@ -118,7 +128,7 @@ def save_document(path: str, text: str, revision: str | None, *, utf8: bool = Fa
         encoding = "utf-8" if utf8 or not existing else existing["encoding"]
         newline = existing["newline"] if existing else "\n"
         try:
-            content = text.replace("\n", newline).encode(encoding)
+            content = BOM_ENCODINGS.get(encoding, b"") + text.replace("\n", newline).encode(encoding)
         except UnicodeEncodeError as error:
             raise DocumentError("ENCODING", "برخی نویسه‌ها در رمزگذاری قدیمی فایل قابل ذخیره نیستند؛ با نام دیگر و UTF-8 ذخیره کنید.") from error
         temporary = None

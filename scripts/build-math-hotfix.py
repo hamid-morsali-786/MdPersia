@@ -19,6 +19,7 @@ def main():
     parser.add_argument('--reader', type=Path, required=True)
     parser.add_argument('--compiler', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--patch', choices=['mathml-1', 'compat-1'], default='mathml-1')
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
     output = args.output.resolve()
@@ -29,13 +30,14 @@ def main():
     manifest = json.loads((args.installed / 'release-manifest.json').read_text())
     manifest['nativeSourceRevision'] = '1b390311d911bcd6b89df08d79a3171f968dfbaf'
     manifest['sourceRevision'] = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
-    manifest['localPatch'] = 'mathml-1'
+    manifest['localPatch'] = args.patch
     manifest['files'] = {k: v for k, v in manifest['files'].items() if not k.startswith('reader/')}
     for path in args.reader.rglob('*'):
         if path.is_file():
             manifest['files']['reader/' + path.relative_to(args.reader).as_posix()] = hashlib.sha256(path.read_bytes()).hexdigest()
     (output / 'release-manifest.json').write_text(json.dumps(manifest, indent=2), encoding='utf-8')
-    setup = output / 'MdPersia_0.3.0-beta.3_math-fix_x64-setup.exe'
+    label = 'math-fix' if args.patch == 'mathml-1' else 'compat-fix'
+    setup = output / f'MdPersia_0.3.0-beta.3_{label}_x64-setup.exe'
     # Paths are maintainer-controlled, never document content or remote input.
     def nsi(path):
         value = str(path.resolve())
@@ -77,7 +79,7 @@ SectionEnd
     assert setup.stat().st_size < 30_000_000
     receipt = {'setup': str(setup), 'bytes': setup.stat().st_size,
                'sha256': hashlib.sha256(setup.read_bytes()).hexdigest(),
-               'nativeReusedFromAcceptedBeta3': True, 'localPatch': 'mathml-1'}
+               'nativeReusedFromAcceptedBeta3': True, 'localPatch': args.patch}
     (output / 'installer-size.json').write_text(json.dumps(receipt, indent=2))
     shutil.copy2(args.installed / 'conversion-catalog.json', output)
     print(json.dumps(receipt, indent=2))

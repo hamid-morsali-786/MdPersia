@@ -9,6 +9,8 @@ from importlib import resources
 from pathlib import Path
 from typing import Final
 
+from mdit_py_plugins.footnote import footnote_plugin
+from mdit_py_plugins.tasklists import tasklists_plugin
 from markdown_it import MarkdownIt
 from .math_renderer import math_plugin
 
@@ -84,14 +86,15 @@ class HtmlDocument:
 
 def read_text_safely(path: Path) -> str:
     """Read Markdown files commonly produced on Windows editors."""
-    try:
-        return path.read_text(encoding="utf-8-sig")
-    except UnicodeDecodeError:
-        return path.read_text(encoding="cp1256")
+    from .document_io import decode_markdown, normalized_text
+    return normalized_text(decode_markdown(path.read_bytes())[0])
 
 
 def strip_front_matter(text: str) -> str:
-    return FRONT_MATTER_RE.sub("", text, count=1)
+    match = FRONT_MATTER_RE.match(text)
+    if match and re.search(r"(?m)^[^\s:#][^:\n]*:(?:[ \t]|$)", match.group()):
+        return text[match.end():]
+    return text
 
 
 def convert_mermaid_fences_to_html(text: str) -> tuple[str, bool]:
@@ -230,6 +233,42 @@ def build_markdown_renderer() -> MarkdownIt:
     # These rules are commonly used in documentation Markdown.
     renderer.enable("table")
     renderer.enable("strikethrough")
+    renderer.use(footnote_plugin)
+    renderer.use(tasklists_plugin)
+    original_fence = renderer.renderer.rules["fence"]
+
+    def fence(tokens, index, options, env):
+        token = tokens[index]
+        if token.info.strip().lower() == "mermaid":
+            env["has_mermaid"] = True
+            return '<pre class="mermaid">\n' + html.escape(token.content.strip()) + '\n</pre>\n'
+        return original_fence(tokens, index, options, env)
+
+    renderer.renderer.rules["fence"] = fence
+    renderer.add_render_rule("table_open", lambda self, tokens, i, options, env:
+                             '<div class="md-table-scroll">' + self.renderToken(tokens, i, options, env))
+    renderer.add_render_rule("table_close", lambda self, tokens, i, options, env:
+                             self.renderToken(tokens, i, options, env) + '</div>\n')
+
+    def heading_ids(state):
+        used = set()
+        for index, token in enumerate(state.tokens[:-1]):
+            if token.type != "heading_open":
+                continue
+            children = state.tokens[index + 1].children or []
+            label = "".join(t.content for t in children if t.type in {"text", "code_inline", "image"})
+            if token.tag == "h1" and label:
+                state.env.setdefault("document_title", "".join(t.content for t in children
+                        if t.type in {"text", "code_inline", "image", "html_inline"}))
+            stem = re.sub(r"[^\w\- \u200c]", "", label.lower()).strip().replace(" ", "-") or "section"
+            slug, suffix = stem, 0
+            while slug in used:
+                suffix += 1
+                slug = f"{stem}-{suffix}"
+            used.add(slug)
+            token.attrSet("id", slug)
+
+    renderer.core.ruler.push("heading_ids", heading_ids)
     math_plugin(renderer)
     _bidi_plugin(renderer)
     return renderer
@@ -423,7 +462,11 @@ def _transform_callouts(html_str: str, strip_emojis_flag: bool = False) -> str:
 
 
 def _transform_pagebreaks(html_str: str) -> str:
-    return PAGEBREAK_RE.sub(r'<div class="page-break"></div>', html_str)
+    # Preserve the literal contents of code examples and highlighted fences.
+    parts = re.split(r"(<pre\b[^>]*>.*?</pre>|<code\b[^>]*>.*?</code>)", html_str,
+                     flags=re.IGNORECASE | re.DOTALL)
+    return "".join(part if index % 2 else PAGEBREAK_RE.sub('<div class="page-break"></div>', part)
+                   for index, part in enumerate(parts))
 
 
 def fix_bidi_list_items(html_content: str) -> str:
@@ -470,11 +513,13 @@ def build_html(markdown_text: str, options: HtmlBuildOptions) -> HtmlDocument:
     if options.strip_emojis:
         markdown_text = strip_emojis(markdown_text)
     markdown_text = strip_front_matter(markdown_text)
-    title = extract_title(markdown_text, options.source_path.stem)
 
-    markdown_with_mermaid, has_mermaid = convert_mermaid_fences_to_html(markdown_text)
+
     renderer = build_markdown_renderer()
-    body_html = renderer.render(markdown_with_mermaid)
+    env = {}
+    body_html = renderer.render(markdown_text, env)
+    has_mermaid = bool(env.get("has_mermaid"))
+    title = env.get("document_title", options.source_path.stem)
     body_html = _transform_callouts(body_html, strip_emojis_flag=options.strip_emojis)
     body_html = _transform_pagebreaks(body_html)
     body_html = fix_bidi_list_items(body_html)

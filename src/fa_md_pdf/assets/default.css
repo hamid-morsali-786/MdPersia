@@ -301,3 +301,10 @@ pre code .nc, pre code .nn { color: #0e84b5; font-weight: bold; } /* Classes / N
 pre code .o, pre code .ow { color: #555555; } /* Operators */
 pre code .nb, pre code .bp { color: #007020; } /* Builtins */
 pre code .na, pre code .nv, pre code .vi, pre code .vg { color: #19177c; } /* Attributes / Variables */
+
+@media screen {
+  .md-table-scroll { max-width: 100%; overflow-x: auto; }
+}
+.task-list-item { list-style-type: none; }
+.task-list-item-checkbox { margin-inline: 0 .4em; }
+.footnotes { margin-block-start: 2em; font-size: .92em; }
