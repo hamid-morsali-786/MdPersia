@@ -282,6 +282,15 @@ blockquote.callout-caution {
 }
 
 /* Pygments Syntax Highlighting */
+.math { direction: ltr; unicode-bidi: isolate; color: inherit; }
+.math.block { overflow-x: auto; padding: 1rem .5rem; margin: 1rem 0;
+  text-align: center; break-inside: avoid; }
+.math math { font-family: "Cambria Math", "STIX Two Math", math;
+  font-size: 1.15em; color: inherit; direction: ltr; }
+.math math[display="block"] { margin: 0 auto; width: max-content; }
+.math menclose[notation="box"] { border: 1px solid currentColor; padding: .15em .3em; }
+.math-error { white-space: pre-wrap; overflow-wrap: anywhere; }
+
 pre code .k, pre code .kd, pre code .kn, pre code .kr { color: #007020; font-weight: bold; } /* Keywords */
 pre code .kt { color: #902000; font-weight: bold; } /* Type */
 pre code .s, pre code .s1, pre code .s2, pre code .sb, pre code .sc, pre code .sd { color: #ba2121; } /* Strings */

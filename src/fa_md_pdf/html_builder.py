@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Final
 
 from markdown_it import MarkdownIt
+from .math_renderer import math_plugin
 
 DEFAULT_MERMAID_CDN: Final[str] = "https://cdn.jsdelivr.net/npm/mermaid@11.15.0/dist/mermaid.min.js"
 
@@ -229,6 +230,7 @@ def build_markdown_renderer() -> MarkdownIt:
     # These rules are commonly used in documentation Markdown.
     renderer.enable("table")
     renderer.enable("strikethrough")
+    math_plugin(renderer)
     _bidi_plugin(renderer)
     return renderer
 
