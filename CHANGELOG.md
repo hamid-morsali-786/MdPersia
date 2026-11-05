@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.0] - 2026-11-05
+
+### Added
+- Official standalone Windows Installer (`MdPersia-0.3.0-x64-Setup.exe`, ~15 MB) powered by Tauri v2 and NSIS with zero prerequisite installation.
+- Native Windows file associations for `.md` and `.markdown` files with custom MdPersia branding and icons.
+- Bilingual LaTeX Math rendering support (`math_renderer.py`, `word_math.py`) completely offline across PDF and Word (DOCX).
+- Smart BiDi algorithm with colon isolation for bilingual Persian-English text, completely resolving text inversion in Word (Issue #1).
+- Official PyPI distribution: global installation via `pip install mdpersia` (Issue #5).
+- Modular architecture separating the lightweight reading engine (< 16 MB) from optional heavy conversion resources.
+- Expanded test suite to 205 automated tests with visual regression baselines and module contracts.
+- Collapsible workspace output sidebar and centered reading layout in desktop interface.
+
+### Changed
+- Promoted project release to stable version `0.3.0`.
+- Streamlined GitHub Actions release pipeline with automated tag builds and asset verification.
+- Improved Word document formatting, native multi-level numbering, and document metadata extraction.
+
 ## [0.2.0] - 2026-10-06
 
 ### Added

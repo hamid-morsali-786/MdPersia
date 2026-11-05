@@ -5,6 +5,8 @@
 
 [![GitHub Stars](https://img.shields.io/github/stars/hamid-morsali-786/MdPersia?style=for-the-badge&color=e8590c)](https://github.com/hamid-morsali-786/MdPersia/stargazers)
 [![GitHub Forks](https://img.shields.io/github/forks/hamid-morsali-786/MdPersia?style=for-the-badge&color=f59e0b)](https://github.com/hamid-morsali-786/MdPersia/network/members)
+[![Release](https://img.shields.io/github/v/release/hamid-morsali-786/MdPersia?style=for-the-badge&color=e8590c&logo=github)](https://github.com/hamid-morsali-786/MdPersia/releases/latest)
+[![PyPI Version](https://img.shields.io/pypi/v/mdpersia?style=for-the-badge&color=3775A9&logo=pypi&logoColor=white)](https://pypi.org/project/mdpersia/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](LICENSE)
 [![Python Version](https://img.shields.io/badge/Python-3.11%20%7C%203.12%20%7C%203.13-brightgreen?style=for-the-badge&logo=python)](https://python.org)
 [![CI Build](https://img.shields.io/badge/CI-Passing-success?style=for-the-badge&logo=githubactions)](https://github.com/hamid-morsali-786/MdPersia/actions)
@@ -74,6 +76,8 @@ Writing technical documentation in Markdown is the industry standard. However, c
 - 📁 **Batch Directory Processing**: Converts entire folders and subfolders while preserving directory hierarchies.
 - 🪄 **Intelligent Markdown Repair (`--wrap-rtl`)**: Automatically wraps Persian paragraphs with `<div dir="rtl">` without touching code blocks or existing markup.
 - 🖥️ **Modern Desktop GUI (Tauri)**: A responsive 3-pane workbench with light/dark theme switching, real-time logging, and parameter inspection.
+- 📐 **Offline LaTeX Math**: Full offline rendering for inline and block LaTeX equations in PDF and Word (DOCX).
+- 🧠 **Smart BiDi Isolation**: Intelligent bidirectional text handling preventing English words and colons from flipping inside Persian sentences.
 
 ---
 
@@ -294,9 +298,13 @@ output_file = wrap_rtl_in_file(Path("docs/guide.md"))
 
 ## Installation
 
-### Windows desktop installer
+### 🖥️ Windows Desktop Installer (Zero Prerequisites)
 
-Run `MdPersia_*_x64-setup.exe` for the existing reader and editor. Setup has an enforced 30,000,000-byte limit and includes the private reader, fonts and Mermaid. Reading, previewing, editing and saving work offline. End users do not need to install Python or Node, or run the development commands below.
+For everyday desktop usage without installing Python or Node:
+
+👉 **[Download Windows Installer (v0.3.0)](https://github.com/hamid-morsali-786/MdPersia/releases/download/v0.3.0/MdPersia-0.3.0-x64-Setup.exe)** (`MdPersia-0.3.0-x64-Setup.exe` - lightweight ~15 MB executable)
+
+* **Features:** Automatic Windows file association for `.md` and `.markdown` files with MdPersia icons, lightweight distraction-free editor, offline preview, bundled Vazirmatn fonts and local Mermaid rendering. Setup has an enforced 30,000,000-byte limit and includes the private reader, fonts and Mermaid. Reading, previewing, editing and saving work offline. End users do not need to install Python or Node, or run the development commands below.
 
 PDF and Word use an optional conversion pack. Settings and the first conversion request show its download size; downloading starts only when selected. The app verifies its pinned SHA-256 before installation. Download cancellation, retry, ZIP import and removal are available. Conversion works offline after the pack is installed. If WebView2 is missing, the embedded Microsoft bootstrapper downloads that shared runtime during installation.
 

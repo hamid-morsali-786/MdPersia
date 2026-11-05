@@ -5,6 +5,8 @@
 
 [![GitHub Stars](https://img.shields.io/github/stars/hamid-morsali-786/MdPersia?style=for-the-badge&color=e8590c)](https://github.com/hamid-morsali-786/MdPersia/stargazers)
 [![GitHub Forks](https://img.shields.io/github/forks/hamid-morsali-786/MdPersia?style=for-the-badge&color=f59e0b)](https://github.com/hamid-morsali-786/MdPersia/network/members)
+[![Release](https://img.shields.io/github/v/release/hamid-morsali-786/MdPersia?style=for-the-badge&color=e8590c&logo=github)](https://github.com/hamid-morsali-786/MdPersia/releases/latest)
+[![PyPI Version](https://img.shields.io/pypi/v/mdpersia?style=for-the-badge&color=3775A9&logo=pypi&logoColor=white)](https://pypi.org/project/mdpersia/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](LICENSE)
 [![Python Version](https://img.shields.io/badge/Python-3.11%20%7C%203.12%20%7C%203.13-brightgreen?style=for-the-badge&logo=python)](https://python.org)
 [![CI Build](https://img.shields.io/badge/CI-Passing-success?style=for-the-badge&logo=githubactions)](https://github.com/hamid-morsali-786/MdPersia/actions)
@@ -78,6 +80,8 @@
 | 📁 **تبدیل دسته‌ای پوشه‌ها (Batch)** | پردازش تو در تو و بازگشتی تمام پوشه‌ها با حفظ دقیق درخت دایرکتوری در خروجی | تبدیل ده‌ها فایل گزارش یا کتاب کامل در یک ثانیه |
 | 🪄 **اصلاح هوشمند (`--wrap-rtl`)** | تزریق خودکار `<div dir="rtl">` بدون تخریب بلوک‌های کد و جداول | استانداردسازی یادداشت‌های قدیمی Obsidian و GitHub |
 | 🖥️ **اپلیکیشن مدرن دسکتاپ (Tauri GUI)** | رابط ۳ پنله با تم روشن و تاریک، اینسپکتور پارامترها و کنسول لاگ زنده | استفاده لذت‌بخش و ساده برای کاربران غیرفنی |
+| 📐 **فرمول‌های ریاضی (LaTeX Math)** | رندر کاملاً آفلاین فرمول‌های ریاضی و معادلات درون‌خطی و بلوکی در PDF و Word | نگارش مقالات علمی و فنی بدون به‌هم‌ریختگی فرمول‌ها |
+| 🧠 **هوشمندی دوزبانه (Smart BiDi)** | رفع کامل وارونگی کلمات انگلیسی و کاراکترهای دونقطه در جملات فارسی در Word | ظاهر تمیز، طبیعی و خوانا مطابق قواعد تایپوگرافی فارسی |
 
 ---
 
@@ -306,9 +310,13 @@ output_file = wrap_rtl_in_file(Path("docs/guide.md"))
 
 ## 💻 نصب و راه‌اندازی (Installation)
 
-### نسخهٔ دسکتاپ ویندوز
+### 🖥️ نسخهٔ دسکتاپ ویندوز (بدون نیاز به پایتون)
 
-برای استفادهٔ روزمره، فایل `MdPersia_*_x64-setup.exe` را اجرا کنید. این بسته همان رابط پروژه را برای مطالعه، پیش‌نمایش، ویرایش و ذخیره نصب می‌کند و به نصب جداگانهٔ Python یا Node نیاز ندارد. سقف فایل Setup در فرایند ساخت ۳۰٬۰۰۰٬۰۰۰ بایت است. فونت‌ها و Mermaid محلی همراه برنامه‌اند؛ خواندن و ویرایش آفلاین کار می‌کند.
+برای استفادهٔ سریع و آسان در ویندوز، فایل نصاب رسمی را مستقیماً دریافت و اجرا کنید:
+
+👉 **[دانلود نصاب ویندوز (نسخه پایدار v0.3.0)](https://github.com/hamid-morsali-786/MdPersia/releases/download/v0.3.0/MdPersia-0.3.0-x64-Setup.exe)** (`MdPersia-0.3.0-x64-Setup.exe` - حجم بهینه ~۱۵ مگابایت)
+
+* **امکانات نصاب:** بدون نیاز به نصب پایتون یا نود؛ ثبت خودکار پسوندهای `.md` و `.markdown` در ویندوز با آیکون MdPersia؛ دارای ادیتور، پیش‌نمایش آفلاین، فونت‌های وزیرمتن و موتور Mermaid محلی. این بسته همان رابط پروژه را برای مطالعه، پیش‌نمایش، ویرایش و ذخیره نصب می‌کند و به نصب جداگانهٔ Python یا Node نیاز ندارد. سقف فایل Setup در فرایند ساخت ۳۰٬۰۰۰٬۰۰۰ بایت است. فونت‌ها و Mermaid محلی همراه برنامه‌اند؛ خواندن و ویرایش آفلاین کار می‌کند.
 
 موتور PDF و Word اختیاری است: از تنظیمات یا هنگام اولین درخواست تبدیل، حجم بسته را ببینید و «دریافت موتور تبدیل» را انتخاب کنید. دریافت خودکار شروع نمی‌شود. پس از دریافت و بررسی SHA-256، تبدیل هم آفلاین کار می‌کند. دریافت را می‌توان متوقف کرد یا بستهٔ ZIP مربوط به همان نسخه را جداگانه دریافت و وارد کرد. موتور از تنظیمات قابل حذف است. در ویندوزی که WebView2 ندارد، نصب‌کنندهٔ کوچک Microsoft آن را هنگام نصب از اینترنت دریافت می‌کند.
 
