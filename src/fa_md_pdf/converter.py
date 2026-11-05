@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from .conversion_report import ConversionIssue, report_conversion, warn
 import tempfile
 import threading
 from dataclasses import dataclass
@@ -68,6 +69,7 @@ class ConvertResult:
     job: ConvertJob
     ok: bool
     error: str | None = None
+    issues: tuple[ConversionIssue, ...] = ()
 
 
 def build_jobs(
@@ -109,6 +111,7 @@ def build_jobs(
     raise ConversionError(f"Input path does not exist: {input_path}")
 
 
+@report_conversion
 def _render_job(page, job: ConvertJob, options: ConvertOptions, temp_dir: Path) -> None:
     markdown_text = read_text_safely(job.source)
     html_document = build_html(
@@ -155,7 +158,7 @@ def _render_job(page, job: ConvertJob, options: ConvertOptions, temp_dir: Path) 
     page.emulate_media(media="print")
     # Printing has no horizontal scrollbar. Measure against the actual paper's
     # content width rather than Playwright's unrelated default viewport width.
-    page.evaluate("""async ({format, landscape, margin}) => {
+    layout = page.evaluate("""async ({format, landscape, margin}) => {
         await document.fonts.ready;
         await Promise.all(Array.from(document.images, image =>
             image.decode().catch(() => {})));
@@ -167,6 +170,7 @@ def _render_job(page, job: ConvertJob, options: ConvertOptions, temp_dir: Path) 
         document.body.append(probe);
         const width = probe.getBoundingClientRect().width;
         probe.remove();
+        let wrapped = 0, scaled = 0;
         for (const math of document.querySelectorAll('.math.block math')) {
             const available = Math.min(width - 24, math.parentElement.clientWidth - 24);
             let current = math.getBoundingClientRect().width;
@@ -205,17 +209,27 @@ def _render_job(page, job: ConvertJob, options: ConvertOptions, temp_dir: Path) 
                         lineWidth += widths[index];
                     });
                     row.replaceWith(table);
+                    wrapped++;
                     current = math.getBoundingClientRect().width;
                 }
             }
             if (available > 0 && current > available) {
+                scaled++;
                 math.style.fontSize = `${parseFloat(getComputedStyle(math).fontSize)
                     * available / current}px`;
             }
         }
+        return {wrapped, scaled, brokenImages: Array.from(document.images).filter(i => !i.naturalWidth).length};
     }""", {"format": options.page_format, "landscape": options.landscape,
           "margin": options.margin})
 
+    if layout['wrapped']:
+        warn('layout.math.wrapped', f"{layout['wrapped']} فرمول بلند چندسطری شد.")
+    if layout['scaled']:
+        warn('layout.math.scaled', f"{layout['scaled']} فرمول برای جا شدن در کاغذ کوچک شد.",
+             suggestion='برای خوانایی بیشتر از کاغذ افقی استفاده کنید.')
+    if layout['brokenImages']:
+        warn('image.decode', 'بعضی تصویرها بارگذاری یا رمزگشایی نشدند.')
     job.output.parent.mkdir(parents=True, exist_ok=True)
     page.pdf(
         path=str(job.output),
@@ -237,6 +251,7 @@ def _render_job(page, job: ConvertJob, options: ConvertOptions, temp_dir: Path) 
     )
 
 
+@report_conversion
 def _render_job_docx(job: ConvertJob, options: ConvertOptions) -> None:
     """Render a Markdown file to DOCX, with Mermaid diagrams as embedded PNGs."""
     from .docx_builder import DocxBuildOptions, build_docx, extract_mermaid_blocks
@@ -260,6 +275,7 @@ def _render_job_docx(job: ConvertJob, options: ConvertOptions) -> None:
                 device_scale_factor=options.docx_image_scale,
             )
         except Exception as exc:  # noqa: BLE001
+            warn('mermaid.render', 'نمودار رندر نشد؛ در صورت ادامه، متن منبع درج می‌شود.')
             if not options.ignore_mermaid_errors:
                 raise ConversionError(
                     f"Failed to render Mermaid diagrams for {job.source}: {exc}"
@@ -331,8 +347,8 @@ def convert_jobs(
                 print(f"[fa-md-pdf] {job.source} -> {job.output}")
 
             try:
-                _render_job_docx(job, options)
-                result = ConvertResult(job=job, ok=True)
+                issues = _render_job_docx(job, options)
+                result = ConvertResult(job=job, ok=True, issues=issues or ())
                 results.append(result)
                 if on_progress:
                     on_progress(job, True, None)
@@ -379,8 +395,8 @@ def convert_jobs(
                         print(f"[fa-md-pdf] {job.source} -> {job.output}")
 
                     try:
-                        _render_job(page, job, options, temp_dir)
-                        result = ConvertResult(job=job, ok=True)
+                        issues = _render_job(page, job, options, temp_dir)
+                        result = ConvertResult(job=job, ok=True, issues=issues or ())
                         results.append(result)
                         if on_progress:
                             on_progress(job, True, None)

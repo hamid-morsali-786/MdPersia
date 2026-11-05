@@ -1,6 +1,8 @@
 from __future__ import annotations
 from .rtl_wrapper import has_persian, classify_block_direction
 from .word_math import append_equation
+from .word_numbering import new_list, apply_list
+from .conversion_report import warn
 
 import re
 import hashlib
@@ -485,6 +487,7 @@ def _add_image_to_paragraph(
     resolved = _resolve_image_file(src, options.source_path)
     if resolved and _embed_image_picture(paragraph, resolved, options):
         return True
+    warn("image.embed", f"درج تصویر در Word ممکن نشد: {src}")
     _add_styled_run(
         paragraph,
         f"[تصویر: {alt or src}]",
@@ -1061,6 +1064,7 @@ def _add_list_item(
     index: int,
     level: int,
     continuation: bool = False,
+    number_id: int | None = None,
 ) -> None:
     paragraph = document.add_paragraph()
     is_item_rtl = options.rtl and classify_block_direction(inline_token.content) == "rtl"
@@ -1074,15 +1078,8 @@ def _add_list_item(
 
     task = any(t.type == "html_inline" and "task-list-item-checkbox" in t.content
                for t in inline_token.children or [])
-    bullet = "" if task or continuation else (f"{index}. " if ordered else "• ")
-    _add_styled_run(
-        paragraph,
-        bullet,
-        font_name=options.font_family,
-        font_size_pt=options.font_size_pt,
-        bold=True,
-        rtl=is_item_rtl,
-    )
+    if not task and not continuation and number_id is not None:
+        apply_list(paragraph, number_id, level, is_item_rtl)
 
     _render_inline_tokens(
         paragraph,
@@ -1381,6 +1378,7 @@ def _render_blocks(document, tokens: list[Token], options: DocxBuildOptions) -> 
     list_levels: list[bool] = []  # stack of ordered flags
     list_indices: list[int] = []  # stack of current index per list
     item_first: list[bool] = []
+    list_numbers: list[int] = []
 
     while i < len(tokens):
         token = tokens[i]
@@ -1415,6 +1413,7 @@ def _render_blocks(document, tokens: list[Token], options: DocxBuildOptions) -> 
                         index=list_indices[-1],
                         level=len(list_levels) - 1,
                         continuation=not first,
+                        number_id=list_numbers[-1],
                     )
                 else:
                     _add_paragraph_block(document, inline, options)
@@ -1446,17 +1445,20 @@ def _render_blocks(document, tokens: list[Token], options: DocxBuildOptions) -> 
             continue
 
         if kind == "bullet_list_open":
+            list_numbers.append(new_list(document, False))
             list_levels.append(False)
             list_indices.append(0)
             i += 1
             continue
         if kind == "ordered_list_open":
+            list_numbers.append(new_list(document, True, int(token.attrGet("start") if token.attrGet("start") is not None else 1)))
             list_levels.append(True)
             list_indices.append(int(token.attrGet("start") if token.attrGet("start") is not None else 1) - 1)
             i += 1
             continue
         if kind in ("bullet_list_close", "ordered_list_close"):
             if list_levels:
+                list_numbers.pop()
                 list_levels.pop()
                 list_indices.pop()
             i += 1
@@ -1559,6 +1561,10 @@ def _add_footnotes(document, tokens, options):
         while j < len(tokens) and tokens[j].type != "footnote_close":
             j += 1
         note = Document()
+        # Footnote list IDs must belong to the package-wide numbering part.
+        numbering_rel = next(rel for rel in note.part.rels.values() if rel.reltype == RT.NUMBERING)
+        note.part.drop_rel(numbering_rel.rId)
+        note.part.relate_to(document.part.numbering_part, RT.NUMBERING)
         _render_blocks(note, tokens[i + 1:j], options)
         if not note.paragraphs:
             note.add_paragraph()

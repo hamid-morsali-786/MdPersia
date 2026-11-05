@@ -1,6 +1,7 @@
 """Convert the reader's sanitized MathML into editable Office equations offline."""
 from __future__ import annotations
 
+from .conversion_report import warn
 import logging
 from xml.etree import ElementTree as ET
 
@@ -66,5 +67,6 @@ def append_equation(paragraph, source: str, *, display: bool = False) -> None:
         else:
             paragraph._p.append(equation)
     except Exception as exc:
+        warn('math.fallback', 'فرمول در Word قابل حروف‌چینی نبود؛ متن منبع حفظ شد.')
         logger.warning("Could not typeset a Word equation; preserving TeX: %s", exc)
         paragraph.add_run(source)

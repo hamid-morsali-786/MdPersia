@@ -67,7 +67,7 @@ def test_headings_bookmarks_tasks_and_numbered_continuations(tmp_path):
         "## مقصد\n\n~~حذف~~\n\n## مقصد")
     assert result.title == "عنوان"
     paragraphs = [p.text for p in Document(path).paragraphs]
-    assert "3. First" in paragraphs and "Continued" in paragraphs and "4. Next" in paragraphs
+    assert "First" in paragraphs and "Continued" in paragraphs and "Next" in paragraphs
     assert any("☒" in p for p in paragraphs) and any("☐" in p for p in paragraphs)
     names = [b.get("{" + NS["w"] + "}name") for b in xml.findall(".//w:bookmarkStart", NS)]
     assert len(names) == len(set(names)) == 3
@@ -99,8 +99,8 @@ def test_zero_start_nested_lists_and_pagebreak_code(tmp_path):
         "0. Zero\n1. One\n\n> 4. Nested\n> 5. Next\n\n"
         "```text\n\\pagebreak\n```\n\n\\pagebreak\n\nAfter")
     text = [p.text for p in Document(path).paragraphs]
-    assert "0. Zero" in text and "1. One" in text
-    assert "4. Nested" in text and "5. Next" in text
+    assert "Zero" in text and "One" in text
+    assert "Nested" in text and "Next" in text
     assert any(p.rstrip("\n") == r"\pagebreak" for p in text)
     assert len(xml.findall('.//w:br[@w:type="page"]', NS)) == 1
 
