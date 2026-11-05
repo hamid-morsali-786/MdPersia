@@ -14,7 +14,7 @@ export const QUEUE_COLUMNS: readonly ColumnDef[] = [
   {
     id: 'name',
     label: 'نام فایل',
-    defaultWidth: 180,
+    defaultWidth: 148,
     minWidth: 110,
     maxWidth: 500,
     required: true,
@@ -23,37 +23,44 @@ export const QUEUE_COLUMNS: readonly ColumnDef[] = [
   {
     id: 'size',
     label: 'حجم',
-    defaultWidth: 80,
+    defaultWidth: 74,
     minWidth: 55,
     maxWidth: 200,
-    align: 'left',
+    align: 'center',
   },
   {
     id: 'status',
     label: 'وضعیت',
-    defaultWidth: 95,
-    minWidth: 75,
+    defaultWidth: 92,
+    minWidth: 90,
     maxWidth: 220,
     align: 'center',
   },
   {
     id: 'relativePath',
-    label: 'مسیر نسبی',
-    defaultWidth: 140,
-    minWidth: 80,
+    label: 'مسیر',
+    defaultWidth: 100,
+    minWidth: 72,
     maxWidth: 400,
     align: 'right',
   },
 ] as const;
 
 export const DEFAULT_COLUMN_WIDTHS: Record<ColumnKey, number> = {
-  name: 180,
-  size: 80,
-  status: 95,
-  relativePath: 140,
+  name: 148,
+  size: 74,
+  status: 92,
+  relativePath: 100,
 };
 
-export const DEFAULT_VISIBLE_COLUMNS: ColumnKey[] = ['name', 'size', 'status', 'relativePath'];
+/**
+ * `relativePath` stays opt-in: four metadata columns cannot share a 380px sidebar
+ * without every cell truncating. It is one click away in the columns popover.
+ */
+export const DEFAULT_VISIBLE_COLUMNS: ColumnKey[] = ['name', 'size', 'status'];
 
-export const STORAGE_KEY_COLUMN_WIDTHS = 'fa_queue_column_widths_v1';
-export const STORAGE_KEY_VISIBLE_COLUMNS = 'fa_queue_visible_columns_v1';
+/** Stretches to the panel width so the table never scrolls sideways. */
+export const FILL_COLUMN: ColumnKey = 'name';
+
+export const STORAGE_KEY_COLUMN_WIDTHS = 'fa_queue_column_widths_v3';
+export const STORAGE_KEY_VISIBLE_COLUMNS = 'fa_queue_visible_columns_v2';

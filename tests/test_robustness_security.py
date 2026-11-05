@@ -8,9 +8,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import docx
-import pytest
 
-from fa_md_pdf.converter import ConversionError, ConvertJob, ConvertOptions, convert_jobs
 from fa_md_pdf.docx_builder import DocxBuildOptions, build_docx
 from fa_md_pdf.html_builder import HtmlBuildOptions, build_html, read_text_safely
 

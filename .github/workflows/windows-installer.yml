@@ -1,0 +1,196 @@
+name: Windows installer
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish_only:
+        description: Publish the verified beta artifact without rebuilding it
+        type: boolean
+        default: false
+  push:
+    branches: [feat/windows-installer]
+    paths-ignore: ['docs/**', 'README*', 'scripts/verify-*.py']
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    if: github.event_name == 'workflow_dispatch' && inputs.publish_only
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: MdPersia-Windows-x64
+          run-id: 41307780307
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: output/publish
+      - name: Verify the exact accepted Setup
+        run: |
+          python - <<'PY'
+          import hashlib
+          from pathlib import Path
+          files = list(Path('output/publish').rglob('*-setup.exe'))
+          assert len(files) == 1
+          setup = files[0]
+          digest = hashlib.sha256(setup.read_bytes()).hexdigest()
+          assert digest == '7acdfb0870a78d7ef9a38aae61346caa9594daaee20d1c2969b81f5db175c575'
+          assert setup.stat().st_size == 15883751
+          # Match the accepted beta.3 checksum file byte-for-byte on Linux too.
+          Path('output/publish/SHA256SUMS.txt').write_bytes(f'{digest}  {setup.name}\n'.encode('ascii'))
+          print(f'Accepted artifact: {setup.name}, {setup.stat().st_size} bytes, SHA-256 {digest}')
+          PY
+      - name: Upload accepted assets and publish the prepared beta
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python - <<'PY'
+          import hashlib, json, os, urllib.request, urllib.parse
+          from pathlib import Path
+          base = 'https://api.github.com/repos/' + os.environ['GITHUB_REPOSITORY']
+          def request(url, data=None, method='GET', mime='application/json'):
+              assert urllib.parse.urlparse(url).hostname in ('api.github.com', 'uploads.github.com')
+              if isinstance(data, dict): data = json.dumps(data).encode()
+              req = urllib.request.Request(url, data=data, method=method, headers={
+                  'Authorization': 'Bearer ' + os.environ['GH_TOKEN'],
+                  'User-Agent': 'MdPersia-release', 'Content-Type': mime})
+              with urllib.request.urlopen(req, timeout=180) as response:
+                  return None if response.status == 204 else json.load(response)
+          # Draft releases have no public tag lookup until they are published.
+          release = next(r for r in request(base + '/releases')
+                         if r['tag_name'] == 'desktop-v0.3.0-beta.3')
+          assert release['draft'], 'Never modify an already published release'
+          assert release['target_commitish'] == '1b390311d911bcd6b89df08d79a3171f968dfbaf'
+          files = [next(Path('output/publish').rglob('*-setup.exe')),
+                   Path('output/publish/SHA256SUMS.txt'), Path('docs/WINDOWS-ACCEPTANCE-beta3.md'),
+                   next(Path('output/publish').rglob('installer-size.json')),
+                   next(Path('output/publish').rglob('conversion-catalog.json'))]
+          for path in files:
+              name = 'TEST-REPORT.md' if path.suffix == '.md' else path.name
+              payload = path.read_bytes()
+              old = next((a for a in release['assets'] if a['name'] == name), None)
+              if old and old['state'] == 'starter':
+                  # GitHub may retain an empty starter after a failed upload.
+                  request(base + '/releases/assets/' + str(old['id']), method='DELETE')
+                  old = None
+              if old:
+                  assert old['state'] == 'uploaded' and old['digest'] == 'sha256:' + hashlib.sha256(payload).hexdigest()
+                  continue
+              result = request(release['upload_url'].split('{')[0] + '?name=' + urllib.parse.quote(name),
+                               payload, 'POST', 'application/octet-stream')
+              assert result['size'] == len(payload)
+              print('Uploaded', name, result['size'])
+          result = request(base + '/releases/' + str(release['id']),
+                           {'draft': False, 'prerelease': True, 'make_latest': 'false'}, 'PATCH')
+          print('Published', result['html_url'])
+          PY
+  build:
+    if: github.event_name != 'workflow_dispatch' || !inputs.publish_only
+    runs-on: windows-2022
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          architecture: x64
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: desktop-tauri/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop-tauri/src-tauri
+          cache-on-failure: true
+      - uses: actions/cache@v4
+        with:
+          path: output/release/browser-cache
+          key: windows-headless-shell-${{ hashFiles('requirements-release.lock') }}
+      - name: Install pinned build inputs
+        run: python -m pip install -r requirements-release.lock
+      - name: Build small reader and optional conversion pack
+        run: python scripts/build-small-windows.py
+      - name: Verify frozen engine without developer runtimes on PATH
+        run: python scripts/verify-frozen-engine.py output/release/conversion-content --output output/release/acceptance
+      - name: Verify reader works without conversion resources
+        run: python scripts/verify-reader-engine.py output/release/staging --output output/release/reader-acceptance
+      - name: Install frontend inputs
+        working-directory: desktop-tauri
+        run: npm ci
+      - name: Frontend tests
+        working-directory: desktop-tauri
+        run: npm test
+      - name: Build native app
+        working-directory: desktop-tauri
+        run: npm run tauri build -- --no-bundle -- --locked
+      - name: Native package safety tests
+        working-directory: desktop-tauri/src-tauri
+        run: cargo test --release --lib --locked
+      - name: Package testable native directory
+        shell: pwsh
+        run: |
+          Copy-Item desktop-tauri/src-tauri/target/release/MdPersia.exe output/release/staging/MdPersia.exe
+          Compress-Archive -Path output/release/staging/* -DestinationPath output/release/MdPersia-native.zip
+      - name: Save native acceptance artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MdPersia-native-x64
+          path: output/release/MdPersia-native.zip
+          compression-level: 0
+          retention-days: 14
+      - name: Build small installer
+        working-directory: desktop-tauri
+        shell: pwsh
+        run: |
+          $bundle = [IO.Path]::GetFullPath((Join-Path $env:GITHUB_WORKSPACE 'desktop-tauri/src-tauri/target/release/bundle/nsis'))
+          $workspace = [IO.Path]::GetFullPath($env:GITHUB_WORKSPACE) + [IO.Path]::DirectorySeparatorChar
+          if (-not $bundle.StartsWith($workspace, [StringComparison]::OrdinalIgnoreCase)) { throw 'Unsafe bundle cleanup path' }
+          if (Test-Path -LiteralPath $bundle) { Remove-Item -LiteralPath $bundle -Recurse -Force }
+          npm run tauri bundle -- --bundles nsis
+      - name: Enforce 30 MB Setup limit
+        run: python scripts/check-installer-size.py
+      - name: Verify installed resources and actual registry commands
+        shell: pwsh
+        run: |
+          $setup = (Get-ChildItem desktop-tauri/src-tauri/target/release/bundle/nsis/*-setup.exe | Select-Object -First 1).FullName
+          python scripts/verify-windows-installer.py $setup --output output/release/installer-acceptance --skip-native-ui
+      - name: Publish immutable optional conversion resources
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $catalog = Get-Content output/release/staging/conversion-catalog.json -Raw | ConvertFrom-Json
+          $tag = "resources-v$($catalog.version)"
+          gh release view $tag --repo $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -ne 0) {
+            $notes = "Optional PDF and Word conversion resources for MdPersia $($catalog.version). Install only through MdPersia or its ZIP import. Reading and editing work without these resources. Filenames contain an immutable content hash."
+            Set-Content output/release/resource-notes.txt $notes
+            gh release create $tag --prerelease --title "MdPersia $($catalog.version) conversion resources" --notes-file output/release/resource-notes.txt --target $env:GITHUB_SHA --repo $env:GITHUB_REPOSITORY
+            if ($LASTEXITCODE -ne 0) { throw "Could not create the optional resource release" }
+          }
+          $existing = @(gh release view $tag --repo $env:GITHUB_REPOSITORY --json assets --jq '.assets[].name')
+          if ($existing -notcontains $catalog.filename) {
+            gh release upload $tag "output/release/conversion-packs/$($catalog.filename)" --repo $env:GITHUB_REPOSITORY
+            if ($LASTEXITCODE -ne 0) { throw "Could not publish the optional conversion pack" }
+          }
+      - name: Save binaries and build evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: MdPersia-Windows-x64
+          path: |
+            desktop-tauri/src-tauri/target/release/bundle/nsis/*-setup.exe
+            desktop-tauri/src-tauri/Cargo.lock
+            output/release/acceptance/frozen-engine-report.json
+            output/release/installer-acceptance/installer-report.json
+            output/release/reader-acceptance/reader-report.json
+            output/release/installer-size.json
+            output/release/staging/conversion-catalog.json
+          if-no-files-found: warn
+          retention-days: 14
+          compression-level: 0

@@ -1,18 +1,12 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
+import os
 import sys
 from pathlib import Path
 
 from . import __version__
-from .converter import (
-    ConversionError,
-    ConvertOptions,
-    build_jobs,
-    convert_jobs,
-    normalize_extensions,
-    output_for_file,
-)
 from .defaults import (
     default_browsers_path,
     default_fonts_path,
@@ -232,11 +226,40 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Watch input files or directory for changes and re-convert automatically.",
     )
+    parser.add_argument(
+        "--register-associations",
+        action="store_true",
+        help=(
+            "Register MdPersia as a per-user handler for .md/.markdown files on Windows "
+            "(double-click, 'Open with' and a right-click verb). HKCU only, no elevation. "
+            "Reversible with --unregister-associations."
+        ),
+    )
+    parser.add_argument(
+        "--unregister-associations",
+        action="store_true",
+        help="Remove only the MdPersia association keys created by --register-associations.",
+    )
+    parser.add_argument(
+        "--association-status",
+        action="store_true",
+        help="Report whether MdPersia is registered for Markdown files for the current user.",
+    )
+    parser.add_argument(
+        "--viewer-exe",
+        default=None,
+        help=(
+            "Executable that Windows should launch for an associated file. "
+            "Defaults to the built desktop exe, then to the current Python interpreter."
+        ),
+    )
 
     return parser
 
 
 def validate_file_option(path: Path | None, label: str) -> Path | None:
+    from .converter import ConversionError
+
     if path is None:
         return None
 
@@ -249,6 +272,8 @@ def validate_file_option(path: Path | None, label: str) -> Path | None:
 
 
 def validate_dir_option(path: Path | None, label: str) -> Path | None:
+    from .converter import ConversionError
+
     if path is None:
         return None
 
@@ -261,6 +286,8 @@ def validate_dir_option(path: Path | None, label: str) -> Path | None:
 
 
 def resolve_mermaid_source(args: argparse.Namespace, project_root: Path) -> str:
+    from .converter import ConversionError
+
     if args.mermaid_url:
         return args.mermaid_url
 
@@ -308,6 +335,7 @@ def resolve_browsers_setting(args: argparse.Namespace, project_root: Path) -> Pa
 def _run_wrap_rtl(args: argparse.Namespace) -> int:
     """Transform Markdown files by wrapping Persian text in <div dir='rtl'>."""
     from .html_builder import read_text_safely
+    from .input_files import normalize_extensions
     from .rtl_wrapper import WrapOptions, wrap_rtl_in_markdown
 
     input_path = args.input.resolve()
@@ -326,7 +354,7 @@ def _run_wrap_rtl(args: argparse.Namespace) -> int:
         sources = [input_path]
         input_root = None
     elif input_path.is_dir():
-        from .converter import discover_markdown_files
+        from .input_files import discover_markdown_files
         sources = discover_markdown_files(input_path, recursive=args.recursive, extensions=extensions)
         input_root = input_path
     else:
@@ -398,6 +426,7 @@ def _run_wrap_rtl(args: argparse.Namespace) -> int:
                         except Exception as ex:  # noqa: BLE001
                             print(f"ERR {s}: {ex}", file=sys.stderr)
                     last_mtimes = get_wrap_mtimes()
+                    print('[fa-md-pdf] Waiting for changes.')
         except KeyboardInterrupt:
             print("\n[fa-md-pdf] Watch stopped.")
 
@@ -421,6 +450,8 @@ def _resolve_wrap_rtl_output(
     source: Path, output: Path | None, input_root: Path | None, suffix: str
 ) -> Path:
     """Compute output path for wrap-rtl transform with clean suffix handling."""
+    from .input_files import output_for_file
+
     clean_suffix = _normalize_rtl_suffix(suffix, source.suffix)
     target_name = (
         f"{source.stem}{clean_suffix}{source.suffix}" if clean_suffix else source.name
@@ -428,37 +459,296 @@ def _resolve_wrap_rtl_output(
     return output_for_file(source, input_root, output, target_name=target_name)
 
 
+def _run_associations(args) -> int:
+    """Apply the per-user Markdown file association requests."""
+    from . import associations
+
+    if args.unregister_associations:
+        try:
+            removed = associations.unregister()
+        except OSError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        if removed:
+            print(f"Removed {len(removed)} MdPersia registry keys:")
+            for loc in removed:
+                print(f"  - {loc}")
+        else:
+            print("No MdPersia association keys were present.")
+        return 0
+
+    if args.association_status:
+        ok, command, reason = associations.association_state()
+        if not command:
+            print("MdPersia Markdown association for the current user: not registered")
+            return 0
+        print(f"MdPersia Markdown association command:\n  {command}")
+        if ok:
+            print("Status: working")
+            return 0
+        print(f"Status: broken - {reason}")
+        print("Repair with: mdpersia --register-associations")
+        return 1
+
+    try:
+        exe = associations.resolve_viewer_exe(find_project_root(args.input), args.viewer_exe)
+        written = associations.register(exe)
+    except OSError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+    print(f"Registered MdPersia for {' and '.join(associations.EXTENSIONS)} -> {exe}")
+    print(f"Wrote {len(written)} per-user values (HKCU, no elevation).")
+    print("Undo with: mdpersia --unregister-associations")
+    return 0
+
+
+_gui_port = os.environ.get("MDPERSIA_GUI_PORT", "1420")
+GUI_PORT = int(_gui_port) if _gui_port.isdigit() and 0 < int(_gui_port) < 65536 else 1420
+GUI_DEV_URL = f"http://localhost:{GUI_PORT}"
+
+
+def _dev_server_running(url: str = GUI_DEV_URL) -> bool:
+    """Whether a `--gui` dev server already answers on the fixed port."""
+    import json
+    import urllib.request
+
+    try:
+        with urllib.request.urlopen(url + "/api/health", timeout=0.6) as resp:
+            return json.load(resp).get("app") == "MdPersia"
+    except Exception:
+        return False
+
+
+def _handoff_gui_file(path: str, url: str = GUI_DEV_URL) -> bool:
+    """Deliver another file to the existing app without opening another window."""
+    import json
+    import urllib.request
+
+    request = urllib.request.Request(
+        url + "/api/open-file", data=json.dumps({"path": path}).encode("utf-8"),
+        headers={"Content-Type": "application/json"}, method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=1) as response:
+            return bool(json.load(response).get("delivered"))
+    except Exception:
+        return False
+
+
+def _focus_gui_window() -> None:
+    if sys.platform != "win32":
+        return
+    import ctypes
+    from ctypes import wintypes
+
+    user32 = ctypes.windll.user32
+    callback_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+    user32.EnumWindows.argtypes = [callback_type, wintypes.LPARAM]
+    user32.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
+    user32.IsWindowVisible.argtypes = [wintypes.HWND]
+    user32.ShowWindowAsync.argtypes = [wintypes.HWND, ctypes.c_int]
+    user32.SetForegroundWindow.argtypes = [wintypes.HWND]
+
+    @callback_type
+    def visit(hwnd, _):
+        title = ctypes.create_unicode_buffer(512)
+        user32.GetWindowTextW(hwnd, title, len(title))
+        if user32.IsWindowVisible(hwnd) and title.value.startswith("MdPersia - تبدیل اسناد"):
+            user32.ShowWindowAsync(hwnd, 9)  # SW_RESTORE
+            user32.SetForegroundWindow(hwnd)
+            return False
+        return True
+
+    user32.EnumWindows(visit, 0)
+
+
+def _frontend_build_current(tauri_dir: Path) -> bool:
+    """Use the built version of this same UI when it matches the current sources."""
+    stamp = tauri_dir / "dist" / ".mdpersia-build"
+    if not (tauri_dir / "dist" / "index.html").is_file() or not stamp.is_file() or not (tauri_dir / "dist" / "desktop-server.mjs").is_file():
+        return False
+    built_at = stamp.stat().st_mtime_ns
+    sources = [tauri_dir / name for name in ("index.html", "package.json", "package-lock.json", "vite.config.ts", "desktopBridge.ts", "desktop-server.ts")]
+    sources.extend(p for p in (tauri_dir / "src").rglob("*")
+                   if p.is_file() and ".test." not in p.name and "__tests__" not in p.parts)
+    return all(not p.exists() or p.stat().st_mtime_ns <= built_at for p in sources)
+
+
+def _open_gui_window(url: str) -> None:
+    """Edge's app mode has no address bar, so the viewer reads as a desktop window."""
+    import subprocess
+    import webbrowser
+
+    if sys.platform == "win32":
+        for root in (os.environ.get("PROGRAMFILES(X86)"), os.environ.get("PROGRAMFILES")):
+            edge = Path(root or "") / "Microsoft" / "Edge" / "Application" / "msedge.exe"
+            if edge.is_file():
+                try:
+                    command = [str(edge), f"--app={url}", "--window-size=1280,800"]
+                    # Opt-in isolated profile for reproducible launch diagnostics.
+                    profile = os.environ.get("MDPERSIA_BROWSER_PROFILE")
+                    if profile:
+                        command += [f"--user-data-dir={profile}", "--no-first-run", "--no-default-browser-check", "--disable-background-networking"]
+                        debug = os.environ.get("MDPERSIA_BROWSER_DEBUG_PORT", "")
+                        if debug.isdigit() and 1024 <= int(debug) <= 65535:
+                            command.append(f"--remote-debugging-port={debug}")
+                    subprocess.Popen(command)
+                    return
+                except OSError:
+                    continue
+    webbrowser.open(url)
+
+
+@contextmanager
+def _gui_launch_lock():
+    """Serialize cold Explorer launches so rapid double-clicks share one server/window."""
+    if sys.platform != "win32":
+        yield
+        return
+    import ctypes
+    from ctypes import wintypes
+
+    kernel = ctypes.windll.kernel32
+    kernel.CreateMutexW.argtypes = [ctypes.c_void_p, wintypes.BOOL, wintypes.LPCWSTR]
+    kernel.CreateMutexW.restype = wintypes.HANDLE
+    kernel.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+    kernel.ReleaseMutex.argtypes = [wintypes.HANDLE]
+    kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+    handle = kernel.CreateMutexW(None, False, f"Local\\MdPersia.Desktop.Startup.{GUI_PORT}")
+    if not handle:
+        raise OSError("Could not acquire the MdPersia startup lock")
+    acquired = kernel.WaitForSingleObject(handle, 15000) in (0, 0x80)
+    try:
+        if not acquired:
+            raise OSError("MdPersia is still starting. Try opening the file again.")
+        yield
+    finally:
+        if acquired:
+            kernel.ReleaseMutex(handle)
+        kernel.CloseHandle(handle)
+
+
+def _wait_gui_window(timeout: float = 8.0) -> bool:
+    import json
+    import time
+    import urllib.request
+
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            with urllib.request.urlopen(GUI_DEV_URL + "/api/health", timeout=0.2) as response:
+                if json.load(response).get("windows", 0):
+                    return True
+        except Exception:
+            pass
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(0.05)
+
+
+def _run_gui(args: argparse.Namespace) -> int:
+    import subprocess
+    import time
+
+    project_root = find_project_root(args.input if args.input else None)
+    tauri_dir = project_root / "desktop-tauri"
+    if not tauri_dir.is_dir():
+        pkg_root = Path(__file__).resolve().parent.parent.parent
+        if (pkg_root / "desktop-tauri").is_dir():
+            project_root = pkg_root
+            tauri_dir = pkg_root / "desktop-tauri"
+    release_exe = (
+        tauri_dir
+        / "src-tauri"
+        / "target"
+        / "release"
+        / "MdPersia.exe"
+    )
+    if release_exe.is_file():
+        cmd = [str(release_exe)]
+        if args.input:
+            cmd.append(str(Path(args.input).resolve()))
+        subprocess.Popen(cmd)
+        return 0
+
+    if tauri_dir.is_dir():
+        from urllib.parse import quote
+
+        initial = str(Path(args.input).resolve()) if args.input else None
+        gui_url = f"{GUI_DEV_URL}/?file={quote(initial)}" if initial else GUI_DEV_URL
+
+        if _dev_server_running():
+            # A second launch must not stack another heavy dev server; the running
+            # window takes the file from the URL and hands it to its open tab.
+            if initial and _handoff_gui_file(initial):
+                _focus_gui_window()
+                return 0
+            print("[fa-md-pdf] Desktop already running; opening the document there.")
+            _open_gui_window(gui_url)
+            _wait_gui_window()
+            return 0
+
+        print("[fa-md-pdf] Launching MdPersia desktop...")
+        import shutil
+
+        node = shutil.which("node")
+        vite_cli = tauri_dir / "node_modules" / "vite" / "bin" / "vite.js"
+        if not node or not vite_cli.is_file():
+            print("Error: Node.js or the desktop dependencies are missing. Run npm install in desktop-tauri.", file=sys.stderr)
+            return 1
+
+        env = os.environ.copy()
+        # The interpreter that launched the CLI may be one without the conversion
+        # dependencies, so an explicitly chosen interpreter has to win.
+        env.setdefault("PYTHON_EXECUTABLE", sys.executable)
+        env.pop("MDPERSIA_INITIAL_FILE", None)
+
+        built = _frontend_build_current(tauri_dir)
+        cmd = [node, str(tauri_dir / "dist" / "desktop-server.mjs")] if built else [node, str(vite_cli)]
+        cmd += ["--port", str(GUI_PORT), "--host", "127.0.0.1", "--strictPort"]
+        proc = subprocess.Popen(
+            cmd, cwd=str(tauri_dir), env=env,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
+        )
+        for _ in range(120):
+            if proc.poll() is not None:
+                print("Error: MdPersia desktop server stopped during startup.", file=sys.stderr)
+                return 1
+            if _dev_server_running():
+                _open_gui_window(gui_url)
+                _wait_gui_window()
+                return 0
+            time.sleep(0.1)
+        proc.terminate()
+        print("Error: MdPersia desktop server did not become ready.", file=sys.stderr)
+        return 1
+
+    print("Error: Graphical interface is provided by desktop-tauri.", file=sys.stderr)
+    return 1
+
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
-    if args.gui:
-        import subprocess
+    if args.register_associations or args.unregister_associations or args.association_status:
+        return _run_associations(args)
 
-        project_root = find_project_root()
-        tauri_dir = project_root / "desktop-tauri"
-        release_exe = (
-            tauri_dir
-            / "src-tauri"
-            / "target"
-            / "release"
-            / "fa-md-pdf-desktop.exe"
-        )
-        if release_exe.is_file():
-            subprocess.Popen([str(release_exe)])
-            return 0
-        if tauri_dir.is_dir():
-            print("[fa-md-pdf] Launching Desktop GUI (Tauri)...")
-            subprocess.Popen(["npm", "run", "dev"], cwd=str(tauri_dir), shell=True)
-            return 0
-        print("Error: Graphical interface is provided by desktop-tauri.", file=sys.stderr)
-        return 1
+    if args.gui:
+        with _gui_launch_lock():
+            return _run_gui(args)
 
     if args.input is None:
         parser.error("the following arguments are required: input (or use --gui)")
 
     if args.wrap_rtl:
         return _run_wrap_rtl(args)
+
+    from .converter import (
+        ConversionError, ConvertOptions, build_jobs, convert_jobs, normalize_extensions,
+    )
 
     try:
         project_root = find_project_root(args.input)
@@ -554,10 +844,15 @@ def main(argv: list[str] | None = None) -> int:
                     if changed:
                         print(f"\n[fa-md-pdf] Detected changes in {len(changed)} file(s). Re-converting...")
                         changed_jobs = [j for j in jobs if j.source in set(changed)]
-                        convert_jobs(changed_jobs, options=options, fail_fast=False)
-                        for cj in changed_jobs:
-                            print(f"OK  {cj.source} -> {cj.output}")
+                        changed_results = convert_jobs(changed_jobs, options=options, fail_fast=False)
+                        for result in changed_results:
+                            if result.ok:
+                                print(f"OK  {result.job.source} -> {result.job.output}")
+                            else:
+                                print(f"ERR {result.job.source}", file=sys.stderr)
+                                print(f"    {result.error}", file=sys.stderr)
                         last_mtimes = current_mtimes
+                        print('[fa-md-pdf] Waiting for changes.')
             except KeyboardInterrupt:
                 print("\n[fa-md-pdf] Stopped watching.")
                 return 0

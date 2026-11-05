@@ -7,7 +7,6 @@ Mermaid scripts, and security sanitization.
 from __future__ import annotations
 
 from pathlib import Path
-import pytest
 
 from fa_md_pdf.html_builder import (
     HtmlBuildOptions,

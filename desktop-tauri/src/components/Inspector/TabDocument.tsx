@@ -24,7 +24,7 @@ export const TabDocument: React.FC<TabDocumentProps> = ({ options, onChange }) =
               onClick={() => onChange('pageFormat', fmt)}
               className={`py-1.5 rounded border text-center transition-colors cursor-pointer ${
                 options.pageFormat === fmt
-                  ? 'bg-blue-600/15 border-blue-500 text-blue-600 dark:text-blue-300 font-medium'
+                  ? 'bg-blue-600/15 border-blue-500 text-blue-700 dark:text-blue-300 font-medium'
                   : 'bg-subtle border-main hover:bg-hover text-muted'
               }`}
             >
@@ -44,7 +44,7 @@ export const TabDocument: React.FC<TabDocumentProps> = ({ options, onChange }) =
               onClick={() => onChange('margin', m)}
               className={`py-1.5 rounded border text-center font-mono transition-colors cursor-pointer ${
                 options.margin === m
-                  ? 'bg-blue-600/15 border-blue-500 text-blue-600 dark:text-blue-300 font-medium'
+                  ? 'bg-blue-600/15 border-blue-500 text-blue-700 dark:text-blue-300 font-medium'
                   : 'bg-subtle border-main hover:bg-hover text-muted'
               }`}
             >
@@ -60,7 +60,7 @@ export const TabDocument: React.FC<TabDocumentProps> = ({ options, onChange }) =
             type="checkbox"
             checked={options.recursive}
             onChange={(e) => onChange('recursive', e.target.checked)}
-            className="rounded border-input bg-input text-blue-600 focus:ring-0"
+            className="rounded border-input bg-input text-blue-600"
           />
           <span className="font-medium">پیمایش بازگشتی تمام زیرپوشه‌ها (Recursive)</span>
         </label>
@@ -70,7 +70,7 @@ export const TabDocument: React.FC<TabDocumentProps> = ({ options, onChange }) =
             type="checkbox"
             checked={options.landscape}
             onChange={(e) => onChange('landscape', e.target.checked)}
-            className="rounded border-input bg-input text-blue-600 focus:ring-0"
+            className="rounded border-input bg-input text-blue-600"
           />
           <span>جهت صفحه افقی (Landscape)</span>
         </label>
@@ -81,7 +81,7 @@ export const TabDocument: React.FC<TabDocumentProps> = ({ options, onChange }) =
               type="checkbox"
               checked={options.pdfPageNumbers}
               onChange={(e) => onChange('pdfPageNumbers', e.target.checked)}
-              className="rounded border-input bg-input text-blue-600 focus:ring-0"
+              className="rounded border-input bg-input text-blue-600"
             />
             <span>درج شماره صفحه در فوتر PDF</span>
           </label>
@@ -92,7 +92,7 @@ export const TabDocument: React.FC<TabDocumentProps> = ({ options, onChange }) =
             type="checkbox"
             checked={options.stripEmojis}
             onChange={(e) => onChange('stripEmojis', e.target.checked)}
-            className="rounded border-input bg-input text-blue-600 focus:ring-0"
+            className="rounded border-input bg-input text-blue-600"
           />
           <span>حذف اموجی‌ها از خروجی (جهت سازگاری چاپ)</span>
         </label>

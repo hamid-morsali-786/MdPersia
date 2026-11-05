@@ -13,4 +13,5 @@ def test_mdpersia_exports():
     assert hasattr(mdpersia, "ConvertOptions")
     assert hasattr(mdpersia, "ConversionError")
     assert hasattr(mdpersia, "main")
-    assert mdpersia.__version__ == "0.2.0"
+    from fa_md_pdf import __version__
+    assert mdpersia.__version__ == __version__

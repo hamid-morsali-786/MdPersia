@@ -3,7 +3,6 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
-from typing import Iterable
 
 
 DEFAULT_MERMAID_RELATIVE_PATH = Path("vendor") / "mermaid.min.js"
@@ -44,6 +43,7 @@ def find_project_root(input_path: Path | None = None, cwd: Path | None = None) -
         starts.append(input_path)
     if getattr(sys, "frozen", False):
         starts.append(Path(sys.executable).parent)
+    starts.append(Path(__file__).resolve().parent)
 
     seen: set[Path] = set()
     for start in starts:

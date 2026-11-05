@@ -4,6 +4,7 @@ import {
   QUEUE_COLUMNS,
   DEFAULT_COLUMN_WIDTHS,
   DEFAULT_VISIBLE_COLUMNS,
+  FILL_COLUMN,
   ColumnKey,
 } from './queueTypes';
 
@@ -26,12 +27,19 @@ test('QUEUE_COLUMNS contains valid column definitions and constraints', () => {
   assert.equal(nameCol?.required, true);
 });
 
-test('DEFAULT_VISIBLE_COLUMNS includes all standard columns', () => {
-  assert.equal(DEFAULT_VISIBLE_COLUMNS.length, 4);
+test('DEFAULT_VISIBLE_COLUMNS keeps the sidebar readable at its default width', () => {
+  assert.deepEqual(DEFAULT_VISIBLE_COLUMNS, ['name', 'size', 'status']);
   assert.ok(DEFAULT_VISIBLE_COLUMNS.includes('name'));
   assert.ok(DEFAULT_VISIBLE_COLUMNS.includes('size'));
   assert.ok(DEFAULT_VISIBLE_COLUMNS.includes('status'));
-  assert.ok(DEFAULT_VISIBLE_COLUMNS.includes('relativePath'));
+  // The path column exists but is opt-in: four columns cannot share a 380px panel.
+  assert.ok(QUEUE_COLUMNS.some((c) => c.id === 'relativePath'));
+  assert.ok(!DEFAULT_VISIBLE_COLUMNS.includes('relativePath'));
+});
+
+test('The auto-stretch column is the required one so the table always fills the panel', () => {
+  assert.equal(FILL_COLUMN, 'name');
+  assert.equal(QUEUE_COLUMNS.find((c) => c.id === FILL_COLUMN)?.required, true);
 });
 
 test('RTL resize calculation handles leftward drag (expansion) correctly', () => {

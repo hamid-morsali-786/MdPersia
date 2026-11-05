@@ -1,6 +1,7 @@
 import React from 'react';
 import { ConvertOptions, MermaidTheme } from '../../types';
 import { FolderOpen, FileCode } from 'lucide-react';
+import { Tooltip } from '../Tooltip';
 
 interface TabMermaidProps {
   options: ConvertOptions;
@@ -29,7 +30,7 @@ export const TabMermaid: React.FC<TabMermaidProps> = ({
               onClick={() => onChange('mermaidTheme', theme)}
               className={`py-1.5 rounded border text-center font-mono capitalize transition-colors cursor-pointer ${
                 options.mermaidTheme === theme
-                  ? 'bg-blue-600/15 border-blue-500 text-blue-600 dark:text-blue-300 font-medium'
+                  ? 'bg-blue-600/15 border-blue-500 text-blue-700 dark:text-blue-300 font-medium'
                   : 'bg-subtle border-main hover:bg-hover text-muted'
               }`}
             >
@@ -63,13 +64,16 @@ export const TabMermaid: React.FC<TabMermaidProps> = ({
             dir="ltr"
           />
           {onBrowseFile && (
-            <button
-              type="button"
-              onClick={() => onBrowseFile('mermaidJs', 'js')}
-              className="px-3 py-2 rounded bg-subtle hover:bg-hover text-main transition-colors cursor-pointer"
-            >
-              <FileCode className="w-3.5 h-3.5" />
-            </button>
+            <Tooltip label="انتخاب فایل mermaid.min.js">
+              <button
+                type="button"
+                onClick={() => onBrowseFile('mermaidJs', 'js')}
+                className="btn p-2 rounded bg-subtle hover:bg-hover text-muted hover:text-main shrink-0"
+                aria-label="انتخاب فایل mermaid"
+              >
+                <FileCode className="w-3.5 h-3.5" />
+              </button>
+            </Tooltip>
           )}
         </div>
       </div>
@@ -98,13 +102,16 @@ export const TabMermaid: React.FC<TabMermaidProps> = ({
             dir="ltr"
           />
           {onBrowseDir && (
-            <button
-              type="button"
-              onClick={() => onBrowseDir('browsersPath')}
-              className="px-3 py-2 rounded bg-subtle hover:bg-hover text-main transition-colors cursor-pointer"
-            >
-              <FolderOpen className="w-3.5 h-3.5" />
-            </button>
+            <Tooltip label="انتخاب پوشه مرورگرها">
+              <button
+                type="button"
+                onClick={() => onBrowseDir('browsersPath')}
+                className="btn p-2 rounded bg-subtle hover:bg-hover text-muted hover:text-main shrink-0"
+                aria-label="انتخاب پوشه مرورگرها"
+              >
+                <FolderOpen className="w-3.5 h-3.5" />
+              </button>
+            </Tooltip>
           )}
         </div>
       </div>
@@ -115,7 +122,7 @@ export const TabMermaid: React.FC<TabMermaidProps> = ({
             type="checkbox"
             checked={options.ignoreMermaidErrors}
             onChange={(e) => onChange('ignoreMermaidErrors', e.target.checked)}
-            className="rounded border-input bg-input text-blue-600 focus:ring-0"
+            className="rounded border-input bg-input text-blue-600"
           />
           <span>چشم‌پوشی از خطاهای سینتکس Mermaid حین تبدیل</span>
         </label>

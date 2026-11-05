@@ -1,82 +1,70 @@
 from __future__ import annotations
+from .rtl_wrapper import has_persian, classify_block_direction
+from .word_math import append_equation
+from .word_numbering import new_list, apply_list
+from .conversion_report import warn
+# Compatibility exports preserve the previous import paths.
+from .word_styles import (
+    _clean_xml_text as _clean_xml_text,
+    _set_paragraph_rtl as _set_paragraph_rtl,
+    _set_paragraph_ltr as _set_paragraph_ltr,
+    _set_run_rtl as _set_run_rtl,
+    _set_run_ltr as _set_run_ltr,
+    _set_run_size_cs as _set_run_size_cs,
+    _set_run_bold_cs as _set_run_bold_cs,
+    _set_run_italic_cs as _set_run_italic_cs,
+    _set_run_font as _set_run_font,
+    _set_document_default_rtl as _set_document_default_rtl,
+    RunStyle as RunStyle,
+    _split_emojis as _split_emojis,
+    _apply_run_formatting as _apply_run_formatting,
+    _add_single_run as _add_single_run,
+    _add_emoji_split_runs as _add_emoji_split_runs,
+    _add_styled_run as _add_styled_run,
+    _create_hyperlink_piece as _create_hyperlink_piece,
+    DEFAULT_DOCX_FONT as DEFAULT_DOCX_FONT,
+    DEFAULT_DOCX_FONT_FALLBACK as DEFAULT_DOCX_FONT_FALLBACK,
+    DEFAULT_DOCX_CODE_FONT as DEFAULT_DOCX_CODE_FONT,
+    DEFAULT_DOCX_EMOJI_FONT as DEFAULT_DOCX_EMOJI_FONT,
+    XML_ILLEGAL_CHARS_RE as XML_ILLEGAL_CHARS_RE,
+)
+from .word_document import (
+    create_document,
+    page_geometry,
+    PAGE_FORMAT_DIMENSIONS as PAGE_FORMAT_DIMENSIONS,
+    UNIT_CONVERTERS as UNIT_CONVERTERS,
+    parse_docx_length as parse_docx_length,
+)
+from .local_images import resolve_image_file as _resolve_image_file
 
 import re
+import hashlib
+from urllib.parse import unquote
 from dataclasses import dataclass, replace
 from html.parser import HTMLParser
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING
 
 from docx import Document
-from docx.enum.section import WD_ORIENT
 from docx.enum.table import WD_ALIGN_VERTICAL
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import qn
-from docx.shared import Cm, Inches, Mm, Pt, RGBColor
+from docx.shared import Inches, Pt, RGBColor
 from markdown_it import MarkdownIt
 from markdown_it.token import Token
 
 from .html_builder import (
-    DEFAULT_MERMAID_CDN,
-    EMOJI_PATTERN,
-    convert_mermaid_fences_to_html,
-    extract_title,
-    read_text_safely,
+    build_markdown_renderer,
     strip_emojis,
     strip_front_matter,
 )
 
 if TYPE_CHECKING:
     from docx.document import Document as DocxDocument
-    from docx.shared import Length
     from docx.text.paragraph import Paragraph
 
 
-DEFAULT_DOCX_FONT = "Vazirmatn"
-DEFAULT_DOCX_FONT_FALLBACK = "Tahoma"
-DEFAULT_DOCX_CODE_FONT = "Consolas"
-DEFAULT_DOCX_EMOJI_FONT = "Segoe UI Emoji"
-
-XML_ILLEGAL_CHARS_RE = re.compile(
-    r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f\ud800-\udfff\ufffe\uffff]"
-)
-
-
-def _clean_xml_text(text: str) -> str:
-    """Remove control characters, surrogates, and noncharacters invalid in XML 1.0."""
-    return XML_ILLEGAL_CHARS_RE.sub("", text) if text else ""
-
 HEADING_SIZES = {1: 22, 2: 18, 3: 15, 4: 13, 5: 12, 6: 11}
-
-PAGE_FORMAT_DIMENSIONS: dict[str, tuple[float, float]] = {
-    "A4": (210.0, 297.0),
-    "LETTER": (215.9, 279.4),
-    "LEGAL": (215.9, 355.6),
-}
-
-
-UNIT_CONVERTERS: dict[str, Any] = {
-    "mm": Mm,
-    "cm": Cm,
-    "in": Inches,
-    "inch": Inches,
-    "pt": Pt,
-    "px": lambda v: Inches(v / 96.0),
-}
-
-
-def parse_docx_length(margin_str: str) -> Length:
-    """Parse length string (e.g. '5mm', '15mm', '0.5in', '1.5cm', '20px') into docx Length."""
-    m = re.match(r"^([\d.]+)\s*(mm|cm|in|inch|pt|px)?$", (margin_str or "").strip().lower())
-    if not m:
-        return Mm(15.0)
-    try:
-        val = float(m.group(1))
-    except ValueError:
-        return Mm(15.0)
-    converter = UNIT_CONVERTERS.get(m.group(2) or "mm", Mm)
-    return converter(val)
-
-
 
 @dataclass(frozen=True)
 class DocxBuildOptions:
@@ -103,266 +91,6 @@ class DocxBuildResult:
     mermaid_blocks: list[str]  # raw mermaid code blocks (for image rendering)
 
 
-def _set_paragraph_rtl(paragraph: "Paragraph") -> None:
-    """Apply right-to-left direction to a paragraph."""
-    pPr = paragraph._p.get_or_add_pPr()
-    bidi = pPr.find(qn("w:bidi"))
-    if bidi is not None:
-        pPr.remove(bidi)
-    bidi = pPr.makeelement(qn("w:bidi"), {})
-    pPr.append(bidi)
-
-
-def _set_paragraph_ltr(paragraph: "Paragraph") -> None:
-    """Explicitly apply left-to-right direction to a paragraph."""
-    pPr = paragraph._p.get_or_add_pPr()
-    bidi = pPr.find(qn("w:bidi"))
-    if bidi is not None:
-        pPr.remove(bidi)
-    bidi = pPr.makeelement(qn("w:bidi"), {qn("w:val"): "0"})
-    pPr.append(bidi)
-
-
-def _set_run_rtl(run) -> None:
-    """Apply right-to-left text formatting to a run."""
-    rPr = run._r.get_or_add_rPr()
-    rtl = rPr.find(qn("w:rtl"))
-    if rtl is not None:
-        rPr.remove(rtl)
-    rtl = rPr.makeelement(qn("w:rtl"), {})
-    rPr.append(rtl)
-
-
-def _set_run_ltr(run) -> None:
-    """Explicitly apply left-to-right text formatting to a run."""
-    rPr = run._r.get_or_add_rPr()
-    rtl = rPr.find(qn("w:rtl"))
-    if rtl is not None:
-        rPr.remove(rtl)
-    rtl = rPr.makeelement(qn("w:rtl"), {qn("w:val"): "0"})
-    rPr.append(rtl)
-
-
-def _set_run_size_cs(run, font_size_pt: int) -> None:
-    """Set complex-script font size (szCs) used for Arabic/Persian text in Word."""
-    rPr = run._r.get_or_add_rPr()
-    # Word stores size in half-points
-    half_pts = str(int(font_size_pt * 2))
-    szCs = rPr.find(qn("w:szCs"))
-    if szCs is None:
-        szCs = rPr.makeelement(qn("w:szCs"), {})
-        rPr.append(szCs)
-    szCs.set(qn("w:val"), half_pts)
-
-
-def _set_run_bold_cs(run) -> None:
-    """Set complex-script bold (bCs) used for Arabic/Persian text in Word."""
-    rPr = run._r.get_or_add_rPr()
-    bCs = rPr.find(qn("w:bCs"))
-    if bCs is None:
-        bCs = rPr.makeelement(qn("w:bCs"), {})
-        rPr.append(bCs)
-
-
-def _set_run_italic_cs(run) -> None:
-    """Set complex-script italic (iCs) used for Arabic/Persian text in Word."""
-    rPr = run._r.get_or_add_rPr()
-    iCs = rPr.find(qn("w:iCs"))
-    if iCs is None:
-        iCs = rPr.makeelement(qn("w:iCs"), {})
-        rPr.append(iCs)
-
-
-def _set_run_font(run, font_name: str, complex_script_font: str | None = None) -> None:
-    """Set the font for both ASCII and complex script (Arabic/Persian)."""
-    run.font.name = font_name
-    rPr = run._r.get_or_add_rPr()
-    rFonts = rPr.find(qn("w:rFonts"))
-    if rFonts is None:
-        rFonts = rPr.makeelement(qn("w:rFonts"), {})
-        rPr.append(rFonts)
-    rFonts.set(qn("w:ascii"), font_name)
-    rFonts.set(qn("w:hAnsi"), font_name)
-    rFonts.set(qn("w:cs"), complex_script_font or font_name)
-
-
-def _set_document_default_rtl(document: "DocxDocument", font_name: str, font_size_pt: int) -> None:
-    """Configure document-wide defaults for RTL Persian."""
-    style = document.styles["Normal"]
-    style.font.name = font_name
-    style.font.size = Pt(font_size_pt)
-
-    # Set RTL on the Normal style paragraph properties
-    style_element = style.element
-    pPr = style_element.find(qn("w:pPr"))
-    if pPr is None:
-        pPr = style_element.makeelement(qn("w:pPr"), {})
-        style_element.append(pPr)
-    bidi = pPr.find(qn("w:bidi"))
-    if bidi is None:
-        bidi = pPr.makeelement(qn("w:bidi"), {})
-        pPr.append(bidi)
-    # Remove any jc - let bidi handle alignment naturally
-    jc = pPr.find(qn("w:jc"))
-    if jc is not None:
-        pPr.remove(jc)
-
-    # Set RTL on the Normal style run properties
-    rPr = style_element.find(qn("w:rPr"))
-    if rPr is None:
-        rPr = style_element.makeelement(qn("w:rPr"), {})
-        style_element.append(rPr)
-    rtl = rPr.find(qn("w:rtl"))
-    if rtl is None:
-        rtl = rPr.makeelement(qn("w:rtl"), {})
-        rPr.append(rtl)
-    rFonts = rPr.find(qn("w:rFonts"))
-    if rFonts is None:
-        rFonts = rPr.makeelement(qn("w:rFonts"), {})
-        rPr.append(rFonts)
-    rFonts.set(qn("w:cs"), font_name)
-    rFonts.set(qn("w:ascii"), font_name)
-    rFonts.set(qn("w:hAnsi"), font_name)
-
-    # Also set heading styles to RTL
-    for heading_num in range(1, 7):
-        style_name = f"Heading {heading_num}"
-        try:
-            h_style = document.styles[style_name]
-            h_element = h_style.element
-            h_pPr = h_element.find(qn("w:pPr"))
-            if h_pPr is None:
-                h_pPr = h_element.makeelement(qn("w:pPr"), {})
-                h_element.append(h_pPr)
-            h_bidi = h_pPr.find(qn("w:bidi"))
-            if h_bidi is None:
-                h_bidi = h_pPr.makeelement(qn("w:bidi"), {})
-                h_pPr.append(h_bidi)
-            # Remove jc from headings too
-            h_jc = h_pPr.find(qn("w:jc"))
-            if h_jc is not None:
-                h_pPr.remove(h_jc)
-        except KeyError:
-            pass
-
-
-@dataclass(frozen=True)
-class RunStyle:
-    font_name: str = DEFAULT_DOCX_FONT
-    font_size_pt: int | None = None
-    bold: bool = False
-    italic: bool = False
-    color: RGBColor | None = None
-    code: bool = False
-    rtl: bool = True
-
-
-def _split_emojis(text: str) -> list[tuple[str, bool]]:
-    """Split text into (substring, is_emoji) pairs."""
-    result: list[tuple[str, bool]] = []
-    last_end = 0
-    for match in EMOJI_PATTERN.finditer(text):
-        start, end = match.span()
-        if start > last_end:
-            result.append((text[last_end:start], False))
-        result.append((match.group(0), True))
-        last_end = end
-    if last_end < len(text):
-        result.append((text[last_end:], False))
-    return result or [(text, False)]
-
-
-def _apply_run_formatting(run, style: RunStyle) -> None:
-    """Apply size, weight, slant, color, and bidi formatting to a run."""
-    if style.font_size_pt is not None:
-        run.font.size = Pt(style.font_size_pt)
-        _set_run_size_cs(run, style.font_size_pt)
-    if style.bold:
-        run.bold = True
-        _set_run_bold_cs(run)
-    if style.italic:
-        run.italic = True
-        _set_run_italic_cs(run)
-    if style.color is not None:
-        run.font.color.rgb = style.color
-    if style.rtl and not style.code:
-        _set_run_rtl(run)
-    else:
-        _set_run_ltr(run)
-
-
-def _add_single_run(paragraph: "Paragraph", text: str, style: RunStyle):
-    """Add a single formatted run to a paragraph."""
-    run = paragraph.add_run(_clean_xml_text(text))
-    f_name = style.font_name
-    cs_font = None if style.code else f_name
-    _set_run_font(run, f_name, complex_script_font=cs_font)
-    _apply_run_formatting(run, style)
-    return run
-
-
-def _add_emoji_split_runs(
-    paragraph: "Paragraph",
-    text: str,
-    base_style: RunStyle,
-    base_font: str,
-):
-    """Split text by emojis and add individual runs with matching fonts."""
-    last_run = None
-    for piece, is_emoji in _split_emojis(text):
-        style = replace(
-            base_style,
-            font_name=DEFAULT_DOCX_EMOJI_FONT if is_emoji else base_font,
-            rtl=False if is_emoji else base_style.rtl,
-        )
-        last_run = _add_single_run(paragraph, piece, style)
-    return last_run
-
-
-def _add_styled_run(
-    paragraph: "Paragraph",
-    text: str,
-    *,
-    font_name: str = DEFAULT_DOCX_FONT,
-    font_size_pt: int | None = None,
-    bold: bool = False,
-    italic: bool = False,
-    code: bool = False,
-    rtl: bool = True,
-    color: RGBColor | None = None,
-):
-    """Add a run to the paragraph with styling and emoji font fallback."""
-    if not text:
-        return None
-    style = RunStyle(
-        font_name=DEFAULT_DOCX_CODE_FONT if code else font_name,
-        font_size_pt=font_size_pt,
-        bold=bold,
-        italic=italic,
-        color=color,
-        code=code,
-        rtl=rtl,
-    )
-    if not code and EMOJI_PATTERN.search(text):
-        return _add_emoji_split_runs(paragraph, text, style, font_name)
-    return _add_single_run(paragraph, text, style)
-
-
-def _create_hyperlink_piece(hyperlink, paragraph: "Paragraph", text: str, style: RunStyle) -> None:
-    """Create a styled run inside a Word hyperlink element."""
-    from docx.oxml import parse_xml
-    from docx.text.run import Run
-
-    run_xml = parse_xml(r'<w:r xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"/>')
-    hyperlink.append(run_xml)
-    run = Run(run_xml, paragraph)
-    run.text = _clean_xml_text(text)
-    cs_font = style.font_name if not style.rtl else None
-    _set_run_font(run, style.font_name, complex_script_font=cs_font)
-    _apply_run_formatting(run, style)
-    run.underline = True
-
-
 def _add_hyperlink_run(
     paragraph: "Paragraph",
     text: str,
@@ -377,14 +105,15 @@ def _add_hyperlink_run(
     """Add a native Word hyperlink to a paragraph with emoji support."""
     try:
         from docx.opc.constants import RELATIONSHIP_TYPE
-        from docx.oxml import parse_xml
 
         part = paragraph.part
-        r_id = part.relate_to(href, RELATIONSHIP_TYPE.HYPERLINK, is_external=True)
-        hyperlink = parse_xml(
-            f'<w:hyperlink xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" '
-            f'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:id="{r_id}"/>'
-        )
+        from docx.oxml import OxmlElement
+        hyperlink = OxmlElement("w:hyperlink")
+        if href.startswith("#"):
+            hyperlink.set(qn("w:anchor"), _bookmark_name(href[1:]))
+        else:
+            r_id = part.relate_to(href, RELATIONSHIP_TYPE.HYPERLINK, is_external=True)
+            hyperlink.set(qn("r:id"), r_id)
         paragraph._p.append(hyperlink)
 
         base_style = RunStyle(
@@ -424,28 +153,11 @@ def _calculate_image_width(img_px_width: int, options: DocxBuildOptions) -> floa
     """Calculate target width in inches constrained by page format and margins."""
     css_width = img_px_width / 96.0
     fmt_key = (options.page_format or "A4").strip().upper()
-    w_mm, h_mm = PAGE_FORMAT_DIMENSIONS.get(fmt_key, (210.0, 297.0))
-    page_w_in = (h_mm if options.landscape else w_mm) / 25.4
-    margin_in = parse_docx_length(options.margin).inches
-    available_w = max(1.0, page_w_in - (2 * margin_in))
-    max_w = min(options.image_max_width_inches, available_w) if options.image_max_width_inches != 6.5 else available_w
+    geometry = page_geometry(fmt_key, options.margin, options.landscape)
+    available_w = geometry.available_image_width
+    max_w = geometry.image_width_limit(options.image_max_width_inches)
     target_w = min(css_width, max_w)
     return min(css_width, available_w) if target_w < 1.0 else target_w
-
-
-def _resolve_image_file(src: str, source_path: Path) -> Path | None:
-    """Resolve relative or absolute local image file path."""
-    if not src or src.startswith(("http://", "https://", "data:")):
-        return None
-    candidate = (source_path.parent / src).resolve()
-    if candidate.is_file():
-        return candidate
-    alt_cand = Path(src).resolve()
-    if alt_cand.is_file():
-        return alt_cand
-    if candidate.suffix.lower() == ".svg" and candidate.with_suffix(".png").is_file():
-        return candidate.with_suffix(".png")
-    return None
 
 
 def _embed_image_picture(paragraph: "Paragraph", image_path: Path, options: DocxBuildOptions) -> bool:
@@ -455,6 +167,9 @@ def _embed_image_picture(paragraph: "Paragraph", image_path: Path, options: Docx
 
         img = DocxImage.from_file(str(image_path))
         target_w = _calculate_image_width(img.px_width, options)
+        geometry = page_geometry(options.page_format.upper(), options.margin, options.landscape)
+        usable_height = geometry.available_image_height
+        target_w = min(target_w, max(.1, usable_height) * img.px_width / img.px_height)
         run = paragraph.add_run()
         run.add_picture(str(image_path), width=Inches(target_w))
         return True
@@ -472,6 +187,7 @@ def _add_image_to_paragraph(
     resolved = _resolve_image_file(src, options.source_path)
     if resolved and _embed_image_picture(paragraph, resolved, options):
         return True
+    warn("image.embed", f"درج تصویر در Word ممکن نشد: {src}")
     _add_styled_run(
         paragraph,
         f"[تصویر: {alt or src}]",
@@ -630,27 +346,42 @@ def _render_inline_tokens(
     bold_stack = [base_bold]
     italic_stack = [False]
     ltr_stack = [False]
+    strike = False
 
     for token in tokens:
         kind = token.type
+        previous_children = len(paragraph._p)
 
         if kind == "html_inline":
             content_lower = token.content.lower()
-            if 'dir="ltr"' in content_lower or "dir='ltr'" in content_lower:
+            if 'task-list-item-checkbox' in content_lower:
+                _add_styled_run(paragraph, "☒ " if 'checked="checked"' in content_lower else "☐ ",
+                                font_name="Segoe UI Symbol", rtl=False)
+                continue
+            if 'dir="ltr"' in content_lower or "dir='ltr'" in content_lower or "<bdi" in content_lower:
                 ltr_stack.append(True)
             elif 'dir="rtl"' in content_lower or "dir='rtl'" in content_lower:
                 ltr_stack.append(False)
-            elif "</span" in content_lower and len(ltr_stack) > 1:
+            elif ("</span" in content_lower or "</bdi" in content_lower) and len(ltr_stack) > 1:
                 ltr_stack.pop()
             elif "<img" in content_lower:
                 _handle_html_inline_image(paragraph, token.content, options)
             continue
 
-        if kind == "text":
+        if kind in {"math_inline", "math_block"}:
+            append_equation(paragraph, _clean_xml_text(token.content), display=kind == "math_block")
+        elif kind == "footnote_ref":
+            from docx.oxml import OxmlElement
+            ref = OxmlElement("w:footnoteReference")
+            ref.set(qn("w:id"), str(token.meta["id"] + 1))
+            run = paragraph.add_run()
+            run.font.superscript = True
+            run._r.append(ref)
+        elif kind == "text":
             text = token.content
             if not text:
                 continue
-            is_rtl = options.rtl and (not ltr_stack[-1])
+            is_rtl = options.rtl and (not ltr_stack[-1]) and has_persian(text)
             link_href = getattr(paragraph, "_link_href", None)
             if link_href:
                 _add_hyperlink_run(
@@ -684,15 +415,15 @@ def _render_inline_tokens(
             run.add_break()
 
         elif kind == "code_inline":
-            _add_styled_run(
-                paragraph,
-                token.content,
-                font_name=options.font_family,
-                font_size_pt=base_size,
-                code=True,
-                rtl=False,
-            )
-            paragraph._link_has_text = True  # type: ignore[attr-defined]
+            href = getattr(paragraph, "_link_href", None)
+            if href:
+                _add_hyperlink_run(paragraph, token.content, href,
+                                   font_name=DEFAULT_DOCX_CODE_FONT,
+                                   font_size_pt=base_size, rtl=False)
+            else:
+                _add_styled_run(paragraph, token.content, font_name=options.font_family,
+                                font_size_pt=base_size, code=True, rtl=False)
+            paragraph._link_has_text = True
 
         elif kind == "strong_open":
             bold_stack.append(True)
@@ -722,40 +453,44 @@ def _render_inline_tokens(
             _add_image_to_paragraph(paragraph, src, alt, options)
 
         elif kind == "s_open":
-            # strikethrough not commonly used; ignore for now
-            pass
+            strike = True
+        elif kind == "s_close":
+            strike = False
+
+        if strike:
+            from docx.text.run import Run
+            for element in list(paragraph._p)[previous_children:]:
+                for run_element in element.iter(qn("w:r")):
+                    Run(run_element, paragraph).font.strike = True
 
 
 # ─── Mermaid extraction (without HTML conversion) ──────────────────
 
-MERMAID_FENCE_RE = re.compile(
-    r"(?ms)(^|\n)(?P<fence>`{3,}|~{3,})[ \t]*mermaid[^\n]*\n(?P<code>.*?)(?:\n(?P=fence)[ \t]*(?=\n|$))"
-)
-
-
 def extract_mermaid_blocks(text: str) -> tuple[str, list[str]]:
-    """
-    Extract mermaid code blocks and replace them with placeholder fences.
-    Returns (modified_text, list_of_mermaid_codes).
-    """
-    blocks: list[str] = []
-
-    def repl(match: re.Match[str]) -> str:
-        code = match.group("code").strip()
-        idx = len(blocks)
-        blocks.append(code)
-        # Use a marker fence that markdown-it parses as a special code block
-        return f"\n\n```__mermaid_placeholder__\n__MERMAID_PLACEHOLDER__{idx}__\n```\n\n"
-
-    modified = MERMAID_FENCE_RE.sub(repl, text)
-    return modified, blocks
+    """Discover actual fences, never Mermaid examples inside another code fence."""
+    tokens = _build_renderer().parse(strip_front_matter(text))
+    return text, [t.content.strip() for t in tokens
+                  if t.type == "fence" and t.info.strip().lower() == "mermaid"]
 
 
 def _build_renderer() -> MarkdownIt:
-    renderer = MarkdownIt("default", {"html": True, "breaks": True, "typographer": True})
-    renderer.enable("table")
-    renderer.enable("strikethrough")
-    return renderer
+    return build_markdown_renderer()
+
+
+def _bookmark_name(slug: str) -> str:
+    # Word bookmark names cannot contain arbitrary Unicode/punctuation.
+    return "md_" + hashlib.sha256(unquote(slug).encode("utf8")).hexdigest()[:32]
+
+
+def _add_bookmark(paragraph, slug: str, identifier: int) -> None:
+    from docx.oxml import OxmlElement
+    start = OxmlElement("w:bookmarkStart")
+    start.set(qn("w:id"), str(identifier))
+    start.set(qn("w:name"), _bookmark_name(slug))
+    end = OxmlElement("w:bookmarkEnd")
+    end.set(qn("w:id"), str(identifier))
+    paragraph._p.append(start)
+    paragraph._p.append(end)
 
 
 # ─── Block rendering ───────────────────────────────────────────────
@@ -767,10 +502,13 @@ def _add_heading(
     inline_token: Token,
     options: DocxBuildOptions,
 ) -> None:
-    paragraph = document.add_paragraph()
-    if options.rtl:
+    paragraph = document.add_paragraph(style=f"Heading {level}")
+    has_fa = options.rtl and classify_block_direction(inline_token.content) == "rtl"
+    if has_fa:
         _set_paragraph_rtl(paragraph)
-        # Don't set jc=right; bidi handles RTL alignment in Word
+    else:
+        _set_paragraph_ltr(paragraph)
+        paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
 
     size = HEADING_SIZES.get(level, 12)
     paragraph.paragraph_format.space_before = Pt(12)
@@ -804,10 +542,14 @@ def _add_paragraph_block(
         t.type == "image" or (t.type == "html_inline" and "<img" in t.content.lower())
         for t in children
     )
+    has_fa = options.rtl and classify_block_direction(inline_token.content) == "rtl"
     if has_image:
         paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    elif options.rtl:
+    elif has_fa:
         _set_paragraph_rtl(paragraph)
+    else:
+        _set_paragraph_ltr(paragraph)
+        paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
 
     _render_inline_tokens(
         paragraph,
@@ -1021,26 +763,23 @@ def _add_list_item(
     ordered: bool,
     index: int,
     level: int,
+    continuation: bool = False,
+    number_id: int | None = None,
 ) -> None:
     paragraph = document.add_paragraph()
-    if options.rtl:
+    is_item_rtl = options.rtl and classify_block_direction(inline_token.content) == "rtl"
+    if is_item_rtl:
         _set_paragraph_rtl(paragraph)
-
-    indent = Inches(0.25 * (level + 1))
-    if options.rtl:
-        paragraph.paragraph_format.right_indent = indent
+        paragraph.paragraph_format.right_indent = Inches(0.25 * (level + 1))
     else:
-        paragraph.paragraph_format.left_indent = indent
+        _set_paragraph_ltr(paragraph)
+        paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        paragraph.paragraph_format.left_indent = Inches(0.25 * (level + 1))
 
-    bullet = f"{index}. " if ordered else "• "
-    _add_styled_run(
-        paragraph,
-        bullet,
-        font_name=options.font_family,
-        font_size_pt=options.font_size_pt,
-        bold=True,
-        rtl=options.rtl,
-    )
+    task = any(t.type == "html_inline" and "task-list-item-checkbox" in t.content
+               for t in inline_token.children or [])
+    if not task and not continuation and number_id is not None:
+        apply_list(paragraph, number_id, level, is_item_rtl)
 
     _render_inline_tokens(
         paragraph,
@@ -1081,23 +820,21 @@ def _add_mermaid_image(
 
         with open(image_path, "rb") as f:
             header = f.read(24)
-        img_width = struct.unpack(">I", header[16:20])[0]
-        img_height = struct.unpack(">I", header[20:24])[0]
+        img_width, img_height = struct.unpack(">II", header[16:24])
 
         # PNGs are rendered at options.image_scale * 96 DPI.
         # Compute natural CSS width and clamp between min and max.
         css_width_inches = img_width / (float(options.image_scale) * 96.0)
         fmt_key = (options.page_format or "A4").strip().upper()
-        w_mm, h_mm = PAGE_FORMAT_DIMENSIONS.get(fmt_key, (210.0, 297.0))
-        page_w_in = (h_mm if options.landscape else w_mm) / 25.4
-        margin_in = parse_docx_length(options.margin).inches
-        available_w = max(1.0, page_w_in - (2 * margin_in))
-        max_limit = min(options.image_max_width_inches, available_w) if options.image_max_width_inches != 6.5 else available_w
+        geometry = page_geometry(fmt_key, options.margin, options.landscape)
+        max_limit = geometry.image_width_limit(options.image_max_width_inches)
         target_width = min(
             max(css_width_inches, options.image_min_width_inches),
             max_limit,
         )
 
+        usable_height = geometry.available_image_height
+        target_width = min(target_width, max(.1, usable_height) * img_width / img_height)
         run.add_picture(str(image_path), width=Inches(target_width))
     except Exception as exc:  # noqa: BLE001
         _add_styled_run(
@@ -1145,8 +882,8 @@ def _add_table_from_tokens(
     Returns index of token after table_close.
     """
     rows: list[list[list[Token]]] = []  # rows -> cells -> inline children
-    is_header_row = False
     current_row: list[list[Token]] = []
+    alignments: list[str | None] = []
 
     i = start_index + 1  # skip table_open
     while i < len(tokens):
@@ -1154,15 +891,15 @@ def _add_table_from_tokens(
         if token.type == "table_close":
             i += 1
             break
-        elif token.type == "thead_open":
-            is_header_row = True
-        elif token.type == "thead_close":
-            is_header_row = False
+        elif token.type in ("thead_open", "thead_close"):
+            pass
         elif token.type == "tr_open":
             current_row = []
         elif token.type == "tr_close":
             rows.append(current_row)
         elif token.type in ("th_open", "td_open"):
+            if token.type == "th_open":
+                alignments.append(token.attrGet("style"))
             # next token should be inline
             if i + 1 < len(tokens) and tokens[i + 1].type == "inline":
                 current_row.append(tokens[i + 1].children or [])
@@ -1178,9 +915,17 @@ def _add_table_from_tokens(
 
     table = document.add_table(rows=len(rows), cols=cols)
     table.style = "Light Grid Accent 1"
+    table.autofit = False
+    section = document.sections[0]
+    width = (section.page_width - section.left_margin - section.right_margin) // cols
+    for column in table.columns:
+        column.width = width
+    for row in table.rows:
+        for cell in row.cells:
+            cell.width = width
 
-    # Right-to-left table layout
-    if options.rtl:
+    # Preserve column order for English tables even in a Persian document.
+    if options.rtl and tokens[start_index].attrGet("dir") == "rtl":
         tbl = table._tbl
         tblPr = tbl.find(qn("w:tblPr"))
         if tblPr is not None:
@@ -1196,9 +941,16 @@ def _add_table_from_tokens(
             # Clear default empty paragraph
             paragraph = cell.paragraphs[0]
             paragraph.text = ""
-            if options.rtl:
+            text = " ".join(t.content for t in inline_tokens)
+            if options.rtl and classify_block_direction(text) == "rtl":
                 _set_paragraph_rtl(paragraph)
-                # Don't set jc; bidi handles alignment
+            else:
+                _set_paragraph_ltr(paragraph)
+            align = alignments[col_idx] if col_idx < len(alignments) else None
+            if align:
+                paragraph.alignment = {"text-align:left": WD_ALIGN_PARAGRAPH.LEFT,
+                    "text-align:center": WD_ALIGN_PARAGRAPH.CENTER,
+                    "text-align:right": WD_ALIGN_PARAGRAPH.RIGHT}.get(align)
 
             is_header = row_idx == 0
             if is_header and col_idx == 0:
@@ -1220,18 +972,6 @@ def _add_table_from_tokens(
 # ─── Main build function ───────────────────────────────────────────
 
 
-def _is_mermaid_placeholder_block(token: Token) -> tuple[bool, int | None]:
-    """Check if a fence token is a mermaid placeholder. Returns (is_placeholder, index)."""
-    if token.type != "fence":
-        return False, None
-    if (token.info or "").strip() != "__mermaid_placeholder__":
-        return False, None
-    match = re.search(r"__MERMAID_PLACEHOLDER__(\d+)__", token.content)
-    if not match:
-        return False, None
-    return True, int(match.group(1))
-
-
 def build_docx(
     markdown_text: str,
     options: DocxBuildOptions,
@@ -1246,81 +986,35 @@ def build_docx(
     if options.strip_emojis:
         markdown_text = strip_emojis(markdown_text)
     text = strip_front_matter(markdown_text)
-    title = extract_title(text, options.source_path.stem)
-
-    # Extract mermaid blocks before parsing
-    text_with_placeholders, mermaid_blocks = extract_mermaid_blocks(text)
-
     renderer = _build_renderer()
-    tokens = renderer.parse(text_with_placeholders)
+    env = {}
+    tokens = renderer.parse(text, env)
+    title = env.get("document_title", options.source_path.stem)
+    mermaid_blocks = [t.content.strip() for t in tokens
+                      if t.type == "fence" and t.info.strip().lower() == "mermaid"]
 
-    document = Document()
-    _set_document_default_rtl(document, options.font_family, options.font_size_pt)
+    document = create_document(options)
 
-    # Set page dimensions, orientation, margins, and footer page numbers
-    fmt_key = (options.page_format or "A4").strip().upper()
-    w_mm, h_mm = PAGE_FORMAT_DIMENSIONS.get(fmt_key, (210.0, 297.0))
-    margin_len = parse_docx_length(options.margin)
+    document.core_properties.title = _clean_xml_text(title)[:255]
+    _render_blocks(document, tokens, options)
 
-    for section in document.sections:
-        if options.landscape:
-            section.page_width = Mm(h_mm)
-            section.page_height = Mm(w_mm)
-            section.orientation = WD_ORIENT.LANDSCAPE
-        else:
-            section.page_width = Mm(w_mm)
-            section.page_height = Mm(h_mm)
-            section.orientation = WD_ORIENT.PORTRAIT
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    document.save(str(output_path))
 
-        section.left_margin = margin_len
-        section.right_margin = margin_len
-        section.top_margin = margin_len
-        section.bottom_margin = margin_len
-        # RTL section - set bidi on section properties
-        if options.rtl:
-            sectPr = section._sectPr
-            bidi = sectPr.find(qn("w:bidi"))
-            if bidi is None:
-                bidi = sectPr.makeelement(qn("w:bidi"), {})
-                sectPr.append(bidi)
-            # Also set document grid for RTL
-            docGrid = sectPr.find(qn("w:docGrid"))
-            if docGrid is None:
-                docGrid = sectPr.makeelement(qn("w:docGrid"), {})
-                sectPr.append(docGrid)
-            docGrid.set(qn("w:charSpace"), "0")
+    return DocxBuildResult(
+        title=title,
+        has_mermaid=bool(mermaid_blocks),
+        mermaid_blocks=mermaid_blocks,
+    )
 
-        # Dynamic Persian footer page numbering: "صفحه X از Y"
-        if options.include_page_numbers:
-            footer = section.footer
-            if footer.paragraphs:
-                f_p = footer.paragraphs[0]
-                f_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                if options.rtl:
-                    _set_paragraph_rtl(f_p)
-                r_page = f_p.add_run("صفحه ")
-                _set_run_font(r_page, options.font_family)
-                r_page.font.size = Pt(9)
-                r_page.font.color.rgb = RGBColor(0x6B, 0x72, 0x80)
 
-                from docx.oxml import parse_xml
-
-                f_p.add_run()._r.append(
-                    parse_xml(r'<w:fldSimple xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" w:instr="PAGE"/>')
-                )
-                r_of = f_p.add_run(" از ")
-                _set_run_font(r_of, options.font_family)
-                r_of.font.size = Pt(9)
-                r_of.font.color.rgb = RGBColor(0x6B, 0x72, 0x80)
-
-                f_p.add_run()._r.append(
-                    parse_xml(r'<w:fldSimple xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" w:instr="NUMPAGES"/>')
-                )
-
+def _render_blocks(document, tokens: list[Token], options: DocxBuildOptions) -> None:
     # Walk tokens
     i = 0
     list_levels: list[bool] = []  # stack of ordered flags
     list_indices: list[int] = []  # stack of current index per list
+    item_first: list[bool] = []
+    list_numbers: list[int] = []
 
     while i < len(tokens):
         token = tokens[i]
@@ -1330,16 +1024,23 @@ def build_docx(
             level = int(kind[-1]) if kind[-1].isdigit() else int(token.tag[1:])
             if i + 1 < len(tokens) and tokens[i + 1].type == "inline":
                 _add_heading(document, level, tokens[i + 1], options)
+                _add_bookmark(document.paragraphs[-1], token.attrGet("id") or "section",
+                              len(document.paragraphs))
             i += 3  # heading_open, inline, heading_close
             continue
 
         if kind == "paragraph_open":
             if i + 1 < len(tokens) and tokens[i + 1].type == "inline":
                 inline = tokens[i + 1]
+                if inline.content.strip() == r"\pagebreak":
+                    document.add_page_break()
+                    i += 3
+                    continue
                 # Check if inside a list item
                 if list_levels:
                     ordered = list_levels[-1]
-                    list_indices[-1] += 1
+                    first = item_first[-1]
+                    item_first[-1] = False
                     _add_list_item(
                         document,
                         inline,
@@ -1347,16 +1048,26 @@ def build_docx(
                         ordered=ordered,
                         index=list_indices[-1],
                         level=len(list_levels) - 1,
+                        continuation=not first,
+                        number_id=list_numbers[-1],
                     )
                 else:
                     _add_paragraph_block(document, inline, options)
             i += 3  # paragraph_open, inline, paragraph_close
             continue
 
+        if kind == "math_block":
+            paragraph = document.add_paragraph()
+            _set_paragraph_ltr(paragraph)
+            paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            paragraph.paragraph_format.keep_together = True
+            append_equation(paragraph, _clean_xml_text(token.content), display=True)
+            i += 1
+            continue
+
         if kind == "fence" or kind == "code_block":
-            is_mermaid, mermaid_idx = _is_mermaid_placeholder_block(token)
-            if is_mermaid and mermaid_idx is not None and mermaid_idx < len(mermaid_blocks):
-                mermaid_code = mermaid_blocks[mermaid_idx]
+            if kind == "fence" and token.info.strip().lower() == "mermaid":
+                mermaid_code = token.content.strip()
                 if options.mermaid_images and mermaid_code in options.mermaid_images:
                     _add_mermaid_image(
                         document, options.mermaid_images[mermaid_code], options
@@ -1370,23 +1081,32 @@ def build_docx(
             continue
 
         if kind == "bullet_list_open":
+            list_numbers.append(new_list(document, False))
             list_levels.append(False)
             list_indices.append(0)
             i += 1
             continue
         if kind == "ordered_list_open":
+            list_numbers.append(new_list(document, True, int(token.attrGet("start") if token.attrGet("start") is not None else 1)))
             list_levels.append(True)
-            list_indices.append(0)
+            list_indices.append(int(token.attrGet("start") if token.attrGet("start") is not None else 1) - 1)
             i += 1
             continue
         if kind in ("bullet_list_close", "ordered_list_close"):
             if list_levels:
+                list_numbers.pop()
                 list_levels.pop()
                 list_indices.pop()
             i += 1
             continue
 
         if kind in ("list_item_open", "list_item_close"):
+            if kind == "list_item_open":
+                item_first.append(True)
+                if list_indices:
+                    list_indices[-1] += 1
+            elif item_first:
+                item_first.pop()
             i += 1
             continue
 
@@ -1404,7 +1124,22 @@ def build_docx(
                 elif tokens[j].type == "inline":
                     inlines.append(tokens[j].children or [])
                 j += 1
-            _add_blockquote(document, inlines, options)
+            nested = tokens[i + 1:j]
+            if any(t.type in {"math_block", "fence", "code_block", "table_open",
+                              "heading_open", "bullet_list_open", "ordered_list_open", "hr"}
+                   for t in nested):
+                before = len(document.paragraphs)
+                if (len(nested) >= 3 and nested[0].type == "paragraph_open"
+                        and re.match(r"^\s*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]",
+                                     nested[1].content, re.IGNORECASE)):
+                    _add_blockquote(document, [nested[1].children or []], options)
+                    nested = nested[3:]
+                _render_blocks(document, nested, options)
+                for paragraph in document.paragraphs[before:]:
+                    paragraph.paragraph_format.left_indent = Inches(.3)
+                    paragraph.paragraph_format.right_indent = Inches(.3)
+            else:
+                _add_blockquote(document, inlines, options)
             i = j + 1
             continue
 
@@ -1422,14 +1157,70 @@ def build_docx(
             i += 1
             continue
 
+        if kind == "footnote_block_open":
+            _add_footnotes(document, tokens[i + 1:], options)
+            break
+
         # Skip unknown tokens
         i += 1
 
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    document.save(str(output_path))
 
-    return DocxBuildResult(
-        title=title,
-        has_mermaid=bool(mermaid_blocks),
-        mermaid_blocks=mermaid_blocks,
-    )
+def _add_footnotes(document, tokens, options):
+    """Emit real Word footnotes, including math, images and external link relations."""
+    from copy import deepcopy
+    from docx.oxml import OxmlElement
+    from docx.opc.part import Part
+    from docx.opc.packuri import PackURI
+    from docx.opc.constants import RELATIONSHIP_TYPE as RT, CONTENT_TYPE as CT
+    from lxml import etree
+
+    root = OxmlElement("w:footnotes")
+    part = Part(PackURI("/word/footnotes.xml"), CT.WML_FOOTNOTES, b"", document.part.package)
+    for identifier, kind in [(-1, "separator"), (0, "continuationSeparator")]:
+        footnote = OxmlElement("w:footnote")
+        footnote.set(qn("w:id"), str(identifier))
+        footnote.set(qn("w:type"), kind)
+        p = OxmlElement("w:p")
+        r = OxmlElement("w:r")
+        r.append(OxmlElement("w:" + kind))
+        p.append(r)
+        footnote.append(p)
+        root.append(footnote)
+    i = 0
+    while i < len(tokens):
+        token = tokens[i]
+        if token.type != "footnote_open":
+            i += 1
+            continue
+        j = i + 1
+        while j < len(tokens) and tokens[j].type != "footnote_close":
+            j += 1
+        note = Document()
+        # Footnote list IDs must belong to the package-wide numbering part.
+        numbering_rel = next(rel for rel in note.part.rels.values() if rel.reltype == RT.NUMBERING)
+        note.part.drop_rel(numbering_rel.rId)
+        note.part.relate_to(document.part.numbering_part, RT.NUMBERING)
+        _render_blocks(note, tokens[i + 1:j], options)
+        if not note.paragraphs:
+            note.add_paragraph()
+        marker = OxmlElement("w:r")
+        marker.append(OxmlElement("w:footnoteRef"))
+        note.paragraphs[0]._p.insert(1 if note.paragraphs[0]._p.pPr is not None else 0, marker)
+        footnote = OxmlElement("w:footnote")
+        footnote.set(qn("w:id"), str(token.meta["id"] + 1))
+        for child in note._element.body:
+            if child.tag == qn("w:sectPr"):
+                continue
+            element = deepcopy(child)
+            for node in element.iter():
+                for attr in (qn("r:id"), qn("r:embed"), qn("r:link")):
+                    old = node.get(attr)
+                    if old:
+                        rel = note.part.rels[old]
+                        target = rel.target_ref if rel.is_external else rel.target_part
+                        node.set(attr, part.relate_to(target, rel.reltype, rel.is_external))
+            footnote.append(element)
+        root.append(footnote)
+        i = j + 1
+    part._blob = etree.tostring(root, xml_declaration=True, encoding="UTF-8", standalone=True)
+    document.part.relate_to(part, RT.FOOTNOTES)

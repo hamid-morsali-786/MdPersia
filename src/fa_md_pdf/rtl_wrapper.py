@@ -57,6 +57,58 @@ def count_persian(text: str) -> int:
     return len(PERSIAN_RE.findall(text))
 
 
+LATIN_RE = re.compile(r"[a-zA-Z]")
+
+
+def count_latin(text: str) -> int:
+    """Return total count of Latin letters in text."""
+    return len(LATIN_RE.findall(text))
+
+
+def detect_direction(text: str) -> str:
+    """
+    Detect whether a text or Markdown document is primarily 'rtl' or 'ltr'.
+    Strips code fences, inline code, URLs, and frontmatter to avoid false classification.
+    """
+    if not text:
+        return "ltr"
+    cleaned = FRONTMATTER_RE.sub(" ", text)
+    cleaned = re.sub(r"```[\s\S]*?```", " ", cleaned)
+    cleaned = re.sub(r"`[^`]+`", " ", cleaned)
+    cleaned = re.sub(r"https?://\S+", " ", cleaned)
+    rtl_count = count_persian(cleaned)
+    latin_count = count_latin(cleaned)
+    if rtl_count == 0:
+        return "ltr"
+    if latin_count == 0:
+        return "rtl"
+    return "rtl" if rtl_count >= latin_count * 0.35 else "ltr"
+
+
+def classify_block_direction(text: str) -> str:
+    """
+    Classify whether a single block (heading, paragraph, list, table) is 'rtl' or 'ltr'.
+    Strips inline code, HTML tags, and URLs to judge by natural language text.
+    Handles Persian sentences opening with Latin terms (e.g. 'Repository با موفقیت...').
+    """
+    if not text:
+        return "ltr"
+    cleaned = re.sub(r"<[^>]+>", " ", text)
+    cleaned = re.sub(r"`[^`]+`", " ", cleaned)
+    cleaned = re.sub(r"https?://\S+", " ", cleaned)
+    rtl = count_persian(cleaned)
+    if rtl == 0:
+        return "ltr"
+    latin = count_latin(cleaned)
+    if latin == 0:
+        return "rtl"
+    return "rtl" if rtl >= latin * 0.3 else "ltr"
+
+
+def is_rtl_document(text: str) -> bool:
+    return detect_direction(text) == "rtl"
+
+
 def _is_fence_open(line: str) -> str | None:
     """Return the fence marker (e.g. '```' or '~~~~') if line opens/closes a fence."""
     match = FENCE_OPEN_RE.match(line)

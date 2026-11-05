@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import os
+from .conversion_report import ConversionIssue, report_conversion, warn
+from .print_layout import prepare_print_layout
 import tempfile
 import threading
 from dataclasses import dataclass
@@ -11,6 +14,12 @@ if TYPE_CHECKING:
 
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import sync_playwright
+from .input_files import (
+    normalize_extensions as normalize_extensions,
+    discover_markdown_files as discover_markdown_files,
+    is_markdown_file as is_markdown_file,
+    output_for_file as output_for_file,
+)
 
 from .html_builder import (
     DEFAULT_MERMAID_CDN,
@@ -61,43 +70,7 @@ class ConvertResult:
     job: ConvertJob
     ok: bool
     error: str | None = None
-
-
-def normalize_extensions(values: Iterable[str]) -> tuple[str, ...]:
-    exts = tuple(dict.fromkeys(f".{v.strip().lstrip('.').lower()}" for v in values if v.strip()))
-    return exts or (".md", ".markdown")
-
-
-def is_markdown_file(path: Path, extensions: Iterable[str]) -> bool:
-    return path.is_file() and path.suffix.lower() in set(normalize_extensions(extensions))
-
-
-def discover_markdown_files(input_dir: Path, recursive: bool, extensions: Iterable[str]) -> list[Path]:
-    normalized = normalize_extensions(extensions)
-    pattern = "**/*" if recursive else "*"
-    return sorted(path for path in input_dir.glob(pattern) if is_markdown_file(path, normalized))
-
-
-def output_for_file(
-    source: Path,
-    input_root: Path | None,
-    output: Path | None,
-    output_format: str = "pdf",
-    target_name: str | None = None,
-) -> Path:
-    target_name = target_name or source.with_suffix(f".{output_format}").name
-    target_suffixes = {".pdf", ".docx", ".md", ".markdown"}
-
-    if output is None:
-        return source.parent / target_name
-
-    if input_root is None:
-        if output.suffix.lower() in target_suffixes:
-            return output
-        return output / target_name
-
-    relative = source.relative_to(input_root)
-    return output / relative.parent / target_name
+    issues: tuple[ConversionIssue, ...] = ()
 
 
 def build_jobs(
@@ -113,7 +86,6 @@ def build_jobs(
 
     input_path = input_path.resolve()
     output = output.resolve() if output else None
-    target_suffix = f".{output_format}"
     target_suffixes = {".pdf", ".docx"}
 
     if input_path.is_file():
@@ -140,6 +112,7 @@ def build_jobs(
     raise ConversionError(f"Input path does not exist: {input_path}")
 
 
+@report_conversion
 def _render_job(page, job: ConvertJob, options: ConvertOptions, temp_dir: Path) -> None:
     markdown_text = read_text_safely(job.source)
     html_document = build_html(
@@ -184,6 +157,7 @@ def _render_job(page, job: ConvertJob, options: ConvertOptions, temp_dir: Path) 
         raise ConversionError(f"Mermaid render error in {job.source}:\n{mermaid_error}")
 
     page.emulate_media(media="print")
+    prepare_print_layout(page, options)
 
     job.output.parent.mkdir(parents=True, exist_ok=True)
     page.pdf(
@@ -206,6 +180,7 @@ def _render_job(page, job: ConvertJob, options: ConvertOptions, temp_dir: Path) 
     )
 
 
+@report_conversion
 def _render_job_docx(job: ConvertJob, options: ConvertOptions) -> None:
     """Render a Markdown file to DOCX, with Mermaid diagrams as embedded PNGs."""
     from .docx_builder import DocxBuildOptions, build_docx, extract_mermaid_blocks
@@ -229,6 +204,7 @@ def _render_job_docx(job: ConvertJob, options: ConvertOptions) -> None:
                 device_scale_factor=options.docx_image_scale,
             )
         except Exception as exc:  # noqa: BLE001
+            warn('mermaid.render', 'نمودار رندر نشد؛ در صورت ادامه، متن منبع درج می‌شود.')
             if not options.ignore_mermaid_errors:
                 raise ConversionError(
                     f"Failed to render Mermaid diagrams for {job.source}: {exc}"
@@ -300,8 +276,8 @@ def convert_jobs(
                 print(f"[fa-md-pdf] {job.source} -> {job.output}")
 
             try:
-                _render_job_docx(job, options)
-                result = ConvertResult(job=job, ok=True)
+                issues = _render_job_docx(job, options)
+                result = ConvertResult(job=job, ok=True, issues=issues or ())
                 results.append(result)
                 if on_progress:
                     on_progress(job, True, None)
@@ -320,7 +296,23 @@ def convert_jobs(
         temp_dir = Path(tmp)
 
         with sync_playwright() as playwright:
-            browser = playwright.chromium.launch(headless=True)
+            def _launch_browser(pw):
+                if os.environ.get('MDPERSIA_BUNDLED_ENGINE') == '1':
+                    return pw.chromium.launch(headless=True)
+                for kw in (
+                    {"headless": True},
+                    {"headless": True, "channel": "msedge"},
+                    {"headless": True, "channel": "chrome"},
+                ):
+                    try:
+                        return pw.chromium.launch(**kw)
+                    except Exception:
+                        continue
+                raise ConversionError(
+                    "Could not launch browser (Chromium/Edge/Chrome). Please make sure a browser is installed."
+                )
+
+            browser = _launch_browser(playwright)
             page = browser.new_page()
 
             try:
@@ -332,8 +324,8 @@ def convert_jobs(
                         print(f"[fa-md-pdf] {job.source} -> {job.output}")
 
                     try:
-                        _render_job(page, job, options, temp_dir)
-                        result = ConvertResult(job=job, ok=True)
+                        issues = _render_job(page, job, options, temp_dir)
+                        result = ConvertResult(job=job, ok=True, issues=issues or ())
                         results.append(result)
                         if on_progress:
                             on_progress(job, True, None)

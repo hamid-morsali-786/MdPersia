@@ -21,7 +21,7 @@ export const TabDocx: React.FC<TabDocxProps> = ({ options, onChange }) => {
               onClick={() => onChange('docxImageScale', scale)}
               className={`py-1.5 rounded border text-center font-mono transition-colors cursor-pointer ${
                 options.docxImageScale === scale
-                  ? 'bg-blue-600/15 border-blue-500 text-blue-600 dark:text-blue-300 font-medium'
+                  ? 'bg-blue-600/15 border-blue-500 text-blue-700 dark:text-blue-300 font-medium'
                   : 'bg-subtle border-main hover:bg-hover text-muted'
               }`}
             >
@@ -77,7 +77,7 @@ export const TabDocx: React.FC<TabDocxProps> = ({ options, onChange }) => {
             type="checkbox"
             checked={options.docxHighlightCode}
             onChange={(e) => onChange('docxHighlightCode', e.target.checked)}
-            className="rounded border-input bg-input text-blue-600 focus:ring-0"
+            className="rounded border-input bg-input text-blue-600"
           />
           <span>رنگ‌آمیزی نحوی بلوک‌های کد در ورد (Highlighting)</span>
         </label>
@@ -87,7 +87,7 @@ export const TabDocx: React.FC<TabDocxProps> = ({ options, onChange }) => {
             type="checkbox"
             checked={options.docxPageNumbers}
             onChange={(e) => onChange('docxPageNumbers', e.target.checked)}
-            className="rounded border-input bg-input text-blue-600 focus:ring-0"
+            className="rounded border-input bg-input text-blue-600"
           />
           <span>درج شماره صفحه در پانویس سند ورد</span>
         </label>

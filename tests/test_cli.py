@@ -20,6 +20,41 @@ from fa_md_pdf.cli import (
 from fa_md_pdf.converter import ConversionError
 
 
+@pytest.mark.parametrize('changed_ok', [True, False])
+def test_watch_reconversion_reports_actual_result_and_returns_to_waiting(tmp_path, monkeypatch, capsys, changed_ok):
+    import os
+    import time
+    from fa_md_pdf import converter
+
+    source = tmp_path / 'watched.md'
+    source.write_text('# Watch test', encoding='utf-8')
+    calls = []
+
+    def convert(jobs, **_kwargs):
+        calls.append(jobs)
+        ok = len(calls) == 1 or changed_ok
+        return [converter.ConvertResult(job, ok, None if ok else 'reconversion failed') for job in jobs]
+
+    ticks = 0
+
+    def tick(_seconds):
+        nonlocal ticks
+        ticks += 1
+        if ticks > 1:
+            raise KeyboardInterrupt
+        later = source.stat().st_mtime + 2
+        os.utime(source, (later, later))
+
+    monkeypatch.setattr(converter, 'convert_jobs', convert)
+    monkeypatch.setattr(time, 'sleep', tick)
+    assert main([str(source), '--format', 'docx', '--watch']) == 0
+    captured = capsys.readouterr()
+    assert len(calls) == 2
+    assert '[fa-md-pdf] Waiting for changes.' in captured.out
+    assert captured.out.count('OK  ') == (2 if changed_ok else 1)
+    assert ('reconversion failed' in captured.err) is (not changed_ok)
+
+
 def test_parser_defaults():
     parser = build_parser()
     args = parser.parse_args(["input.md"])
@@ -290,3 +325,166 @@ def test_mdpersia_package_exports():
     assert callable(mdpersia.build_jobs)
     assert mdpersia.ConvertOptions is not None
     assert mdpersia.ConversionError is not None
+
+
+# --- GUI launcher: a second launch must reuse the running dev server --------------
+# Double-clicking .md files repeatedly should not pile up heavy `npm run dev` processes.
+
+class _Response:
+    def __init__(self, status: int, payload: bytes = b'{"app":"MdPersia"}'):
+        self.status = status
+        self.payload = payload
+
+    def read(self):
+        return self.payload
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+def test_dev_server_running_only_answers_true_for_a_live_server(monkeypatch):
+    import urllib.request
+
+    from fa_md_pdf import cli
+
+    monkeypatch.setattr(urllib.request, "urlopen", lambda url, timeout=None: _Response(200))
+    assert cli._dev_server_running() is True
+
+    monkeypatch.setattr(urllib.request, "urlopen", lambda url, timeout=None: _Response(200, b'{}'))
+    assert cli._dev_server_running() is False
+
+    def refused(url, timeout=None):
+        raise OSError("connection refused")
+
+    monkeypatch.setattr(urllib.request, "urlopen", refused)
+    assert cli._dev_server_running() is False
+
+
+def test_gui_reuses_a_running_server_and_never_spawns_npm(tmp_path, monkeypatch):
+    from fa_md_pdf import cli
+
+    (tmp_path / "desktop-tauri").mkdir()
+    doc = tmp_path / "note.md"
+    doc.write_text("# note\n", encoding="utf-8")
+
+    monkeypatch.setattr(cli, "find_project_root", lambda *a, **k: tmp_path)
+    monkeypatch.setattr(cli, "_dev_server_running", lambda *a, **k: True)
+    monkeypatch.setattr(cli, "_handoff_gui_file", lambda *a, **k: False)
+    monkeypatch.setattr(cli, "_wait_gui_window", lambda *a: True)
+
+    opened: list[str] = []
+    spawned: list = []
+    monkeypatch.setattr(cli, "_open_gui_window", lambda url: opened.append(url))
+    monkeypatch.setattr("subprocess.Popen", lambda *a, **k: spawned.append(a))
+
+    assert main(["--gui", str(doc)]) == 0
+    assert spawned == []
+    assert len(opened) == 1 and "?file=" in opened[0] and "note.md" in opened[0]
+
+
+class _Proc:
+    def poll(self):
+        return None
+
+
+def test_gui_launch_passes_a_python_interpreter_to_the_dev_server(tmp_path, monkeypatch):
+    from fa_md_pdf import cli
+
+    vite_cli = tmp_path / "desktop-tauri" / "node_modules" / "vite" / "bin" / "vite.js"
+    vite_cli.parent.mkdir(parents=True)
+    vite_cli.write_text("", encoding="utf-8")
+    monkeypatch.setattr(cli, "find_project_root", lambda *a, **k: tmp_path)
+    ready = iter([False, True, False, True])
+    monkeypatch.setattr(cli, "_dev_server_running", lambda *a, **k: next(ready))
+    monkeypatch.setattr(cli, "_open_gui_window", lambda url: None)
+    monkeypatch.setattr(cli, "_wait_gui_window", lambda *a: True)
+    monkeypatch.setattr("shutil.which", lambda name: "node.exe")
+
+    spawned: list = []
+    monkeypatch.setattr("subprocess.Popen", lambda *a, **k: (spawned.append((a, k)), _Proc())[1])
+
+    # An explicitly chosen interpreter wins: the launching one may lack the conversion deps.
+    monkeypatch.setenv("PYTHON_EXECUTABLE", r"C:\py\good\python.exe")
+    assert main(["--gui"]) == 0
+    assert spawned[0][1]["env"]["PYTHON_EXECUTABLE"] == r"C:\py\good\python.exe"
+
+    monkeypatch.delenv("PYTHON_EXECUTABLE")
+    assert main(["--gui"]) == 0
+    assert spawned[1][1]["env"]["PYTHON_EXECUTABLE"] == cli.sys.executable
+
+
+def test_gui_handoff_keeps_the_existing_window(tmp_path, monkeypatch):
+    from fa_md_pdf import cli
+
+    (tmp_path / "desktop-tauri").mkdir()
+    doc = tmp_path / "سند من.MD"
+    doc.write_text("# سلام", encoding="utf-8")
+    monkeypatch.setattr(cli, "find_project_root", lambda *a: tmp_path)
+    monkeypatch.setattr(cli, "_dev_server_running", lambda: True)
+    delivered = []
+    monkeypatch.setattr(cli, "_handoff_gui_file", lambda path: delivered.append(path) or True)
+    focused = []
+    monkeypatch.setattr(cli, "_focus_gui_window", lambda: focused.append(True))
+    monkeypatch.setattr(cli, "_open_gui_window", lambda url: pytest.fail("Opened a second window"))
+    monkeypatch.setattr("subprocess.Popen", lambda *a, **k: pytest.fail("Spawned another server"))
+    assert cli.main(["--gui", str(doc)]) == 0
+    assert delivered == [str(doc.resolve())]
+    assert focused == [True]
+
+
+def test_gui_uses_current_build_and_falls_back_when_sources_change(tmp_path):
+    import os
+
+    from fa_md_pdf.cli import _frontend_build_current
+
+    assert not _frontend_build_current(tmp_path)
+    (tmp_path / "src").mkdir()
+    (tmp_path / "dist").mkdir()
+    source = tmp_path / "src" / "App.tsx"
+    source.write_text("source", encoding="utf-8")
+    (tmp_path / "dist" / "index.html").write_text("built UI", encoding="utf-8")
+    (tmp_path / "dist" / "desktop-server.mjs").write_text("built bridge", encoding="utf-8")
+    stamp = tmp_path / "dist" / ".mdpersia-build"
+    stamp.write_text("built", encoding="utf-8")
+    os.utime(stamp, ns=(source.stat().st_mtime_ns + 1000000,) * 2)
+    assert _frontend_build_current(tmp_path)
+    test_source = tmp_path / "src" / "queue.test.ts"
+    test_source.write_text("test-only edit", encoding="utf-8")
+    os.utime(test_source, ns=(stamp.stat().st_mtime_ns + 1000000,) * 2)
+    assert _frontend_build_current(tmp_path)
+    os.utime(source, ns=(stamp.stat().st_mtime_ns + 1000000,) * 2)
+    assert not _frontend_build_current(tmp_path)
+
+
+def test_gui_entrypoint_does_not_import_conversion_runtime():
+    import os
+    import subprocess
+    import sys
+
+    env = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src")}
+    check = subprocess.run([
+        sys.executable, "-c",
+        "import mdpersia; from fa_md_pdf.cli import build_parser; import sys; "
+        "assert 'fa_md_pdf.converter' not in sys.modules; "
+        "assert not any(m.startswith('playwright') for m in sys.modules); "
+        "assert build_parser().parse_args(['--gui']).gui",
+    ], capture_output=True, text=True, env=env)
+    assert check.returncode == 0, check.stderr
+
+
+def test_open_gui_window_falls_back_to_the_default_browser(monkeypatch, tmp_path):
+    import webbrowser
+
+    from fa_md_pdf import cli
+
+    opened: list[str] = []
+    monkeypatch.setattr(webbrowser, "open", lambda url: opened.append(url))
+    monkeypatch.setattr(cli.sys, "platform", "win32")
+    monkeypatch.setenv("PROGRAMFILES", str(tmp_path))
+    monkeypatch.setenv("PROGRAMFILES(X86)", str(tmp_path))
+
+    cli._open_gui_window("http://localhost:1420")
+    assert opened == ["http://localhost:1420"]

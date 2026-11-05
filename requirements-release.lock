@@ -1,0 +1,21 @@
+# Pinned Windows x64 release inputs; refresh deliberately with the release acceptance suite.
+playwright==1.64.0
+greenlet==3.5.6
+pyee==13.0.1
+markdown-it-py==4.2.0
+latex2mathml==3.78.1
+mathml2omml==0.0.2
+mdit-py-plugins==0.6.1
+mdurl==0.1.2
+python-docx==1.2.0
+lxml==4.9.3
+Pygments==2.18.0
+typing_extensions==4.15.0
+pyinstaller==6.22.3
+pyinstaller-hooks-contrib==2026.9
+setuptools==84.2.1
+wheel==0.48.0
+altgraph==0.17.5
+packaging==26.3
+pefile==2024.8.26
+pywin32-ctypes==0.2.3

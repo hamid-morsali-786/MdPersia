@@ -4,8 +4,7 @@ Verifies edge cases, idempotency, YAML frontmatter, and CLI suffix handling.
 """
 
 from pathlib import Path
-import pytest
-from fa_md_pdf.rtl_wrapper import wrap_rtl_in_markdown, WrapOptions
+from fa_md_pdf.rtl_wrapper import wrap_rtl_in_markdown
 from fa_md_pdf.cli import _resolve_wrap_rtl_output
 
 

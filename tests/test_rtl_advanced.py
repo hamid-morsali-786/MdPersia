@@ -6,7 +6,6 @@ min_persian_chars threshold, nested fences, idempotency, and file writing.
 from __future__ import annotations
 
 from pathlib import Path
-import pytest
 
 from fa_md_pdf.rtl_wrapper import (
     WrapOptions,

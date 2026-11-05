@@ -193,7 +193,6 @@ def test_convert_jobs_docx_fail_fast(tmp_path: Path):
 
 def test_convert_jobs_docx_cleans_mermaid_temp_dir(tmp_path: Path, monkeypatch, sample_png_bytes: bytes):
     import tempfile
-    import fa_md_pdf.converter as conv_mod
 
     temp_mermaid_dir = Path(tempfile.mkdtemp(prefix="test-mermaid-leak-"))
     dummy_png = temp_mermaid_dir / "diagram.png"

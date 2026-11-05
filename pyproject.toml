@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mdpersia"
-version = "0.2.0"
+version = "0.3.0b3"
 description = "The modern, offline-first Persian and RTL Markdown to Word (DOCX) & PDF converter with native Mermaid support."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -44,6 +44,9 @@ classifiers = [
   "Topic :: Printing"
 ]
 dependencies = [
+  "mathml2omml==0.0.2",
+  "latex2mathml>=3.78,<4",
+  "mdit-py-plugins>=0.6.1,<0.7",
   "markdown-it-py>=4.2,<5",
   "playwright>=1.59,<2",
   "python-docx>=1.1,<2",
@@ -51,6 +54,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+visual = ["Pillow>=10,<13"]
 dev = [
   "pytest>=8,<9",
   "ruff>=0.4"
@@ -71,7 +75,7 @@ Changelog = "https://github.com/hamid-morsali-786/MdPersia/blob/main/CHANGELOG.m
 where = ["src"]
 
 [tool.setuptools.package-data]
-fa_md_pdf = ["assets/*.css"]
+fa_md_pdf = ["assets/*.css", "assets/*.ico", "assets/*.svg", "assets/*.png"]
 mdpersia = ["assets/*.css"]
 
 [tool.pytest.ini_options]

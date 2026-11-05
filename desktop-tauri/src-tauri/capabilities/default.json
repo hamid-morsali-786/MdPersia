@@ -1,17 +1,16 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Default permissions for fa-md-pdf desktop app",
-  "windows": ["main"],
+  "description": "Default permissions for MdPersia desktop app",
+  "windows": [
+    "main"
+  ],
   "permissions": [
     "core:default",
-    "shell:default",
-    "shell:allow-execute",
-    "shell:allow-spawn",
-    "dialog:default",
+    "core:window:allow-close",
+    "core:window:allow-destroy",
+    "core:webview:default",
     "dialog:allow-open",
-    "dialog:allow-save",
-    "fs:default",
-    "fs:allow-read-text-file"
+    "dialog:allow-save"
   ]
 }

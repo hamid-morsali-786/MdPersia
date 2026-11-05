@@ -294,6 +294,16 @@ output_file = wrap_rtl_in_file(Path("docs/guide.md"))
 
 ## Installation
 
+### Windows desktop installer
+
+Run `MdPersia_*_x64-setup.exe` for the existing reader and editor. Setup has an enforced 30,000,000-byte limit and includes the private reader, fonts and Mermaid. Reading, previewing, editing and saving work offline. End users do not need to install Python or Node, or run the development commands below.
+
+PDF and Word use an optional conversion pack. Settings and the first conversion request show its download size; downloading starts only when selected. The app verifies its pinned SHA-256 before installation. Download cancellation, retry, ZIP import and removal are available. Conversion works offline after the pack is installed. If WebView2 is missing, the embedded Microsoft bootstrapper downloads that shared runtime during installation.
+
+MdPersia appears in the Start Menu and **Open with**. If another Markdown reader is the default, choose **Open with → Choose another app → MdPersia** and select the always-use option once. Existing Windows default-app choices are respected.
+
+See [Windows release instructions](docs/WINDOWS-RELEASE.md) for building and verifying the installer. Beta builds are unsigned unless a publisher certificate is configured; verify the signing status before public distribution.
+
 ### Via pip
 ```bash
 pip install mdpersia
@@ -355,14 +365,23 @@ mdpersia --gui
 ```
 *Or double-click `run_gui.bat` on Windows.*
 
+For daily use from source, run `npm run build` once in `desktop-tauri`. The launcher serves this same complete workbench from the production build through the bundled desktop server while its runtime sources are unchanged, with the same native dialogs, conversion bridge, preview, and console. Editing the frontend switches back to development mode. Additional files are delivered to the open window through SSE, and the production server exits after the last window closes and active conversions finish. Re-registering with `mdpersia --register-associations` also applies the bundled monochrome Markdown/RTL icon.
+
 Features:
+
+- **Editing inside preview:** the pencil opens a Markdown editor and live preview in the same pane. Use `Ctrl+S` to save, `Ctrl+Shift+S` to save as, and the formatting/search/undo controls. Drafts stay independent across queue selections. Saves check the original revision and preserve supported encodings and line endings. Local recovery is offered when you explicitly reopen the same document.
+
+- **App settings:** the gear beside the theme button (`Ctrl+,`) controls system/light/dark appearance, reading zoom, line spacing, text width, code wrapping, reading position, new-file focus, conversion logs, and optional queue-clear confirmation. Preferences save locally; conversion preferences can also be remembered, with Watch off on startup. Reading preferences affect only the preview.
 - **Batch Document Queue**: Drag & drop files and view processing progress.
 - **5-Tab Inspector**: Configure Document, Style, Mermaid, Word, and Advanced options.
 - **Console & Markdown Preview**: Real-time log streaming and instant preview.
 - **Theme Support**: Seamless Light & Dark mode switching.
 
 <p align="center">
-  <img src="docs/screenshots/desktop-ui-light.png" width="850" alt="MdPersia Desktop Interface">
+  <img src="docs/screenshots/desktop-ui-dark.png" width="850" alt="MdPersia Desktop Interface - Dark Theme">
+</p>
+<p align="center">
+  <img src="docs/screenshots/desktop-ui-light.png" width="850" alt="MdPersia Desktop Interface - Light Theme">
 </p>
 
 ---

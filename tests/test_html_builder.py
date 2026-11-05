@@ -36,7 +36,7 @@ def test_build_html_rtl(tmp_path: Path):
     )
 
     assert 'lang="fa" dir="rtl"' in doc.html
-    assert "<h1>عنوان</h1>" in doc.html
+    assert "عنوان</h1>" in doc.html
     assert doc.has_mermaid is False
 
 

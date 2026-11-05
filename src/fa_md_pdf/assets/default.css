@@ -2,13 +2,16 @@
   color-scheme: light;
 }
 
-html {
+html[dir="rtl"] {
   direction: rtl;
 }
 
+html[dir="ltr"] {
+  direction: ltr;
+}
+
 body {
-  direction: rtl;
-  text-align: right;
+  text-align: start;
   font-family: "Vazirmatn", "Noto Naskh Arabic", "Segoe UI", Tahoma, Arial, sans-serif;
   font-size: 12pt;
   line-height: 1.8;
@@ -27,20 +30,60 @@ blockquote,
 td,
 th,
 figcaption {
-  unicode-bidi: plaintext;
+  unicode-bidi: isolate;
 }
 
-h1,
-h2,
-h3,
-h4,
-h5,
-h6 {
+html[dir="rtl"] body {
+  direction: rtl;
+  text-align: right;
+}
+
+html[dir="ltr"] body {
+  direction: ltr;
+  text-align: left;
+}
+
+/* Direction-aware prose blocks:
+   Avoid unicode-bidi: plaintext on block elements, as plaintext classifies
+   any Persian sentence that opens with a Latin term/keyword as LTR!
+*/
+html[dir="rtl"] :is(p, li, dd, dt, blockquote, h1, h2, h3, h4, h5, h6, th, td, figcaption) {
+  direction: rtl;
+  text-align: right;
+  unicode-bidi: isolate;
+}
+
+html[dir="ltr"] :is(p, li, dd, dt, blockquote, h1, h2, h3, h4, h5, h6, th, td, figcaption) {
+  direction: ltr;
+  text-align: left;
+  unicode-bidi: isolate;
+}
+
+/* Explicit direction overrides for bilingual mixed documents */
+:is([dir="ltr"]:not(html, body), [dir="ltr"]:not(html, body) :is(p, li, dd, dt, blockquote, h1, h2, h3, h4, h5, h6, th, td)) {
+  direction: ltr !important;
+  text-align: left !important;
+  unicode-bidi: isolate;
+}
+
+:is([dir="rtl"]:not(html, body), [dir="rtl"]:not(html, body) :is(p, li, dd, dt, blockquote, h1, h2, h3, h4, h5, h6, th, td)) {
+  direction: rtl !important;
+  text-align: right !important;
+  unicode-bidi: isolate;
+}
+
+/* Bi-directional phrasing elements */
+:is(a, span, strong, em, b, i, u, s, mark, code) {
+  unicode-bidi: isolate;
+}
+
+:is(h1, h2, h3, h4, h5, h6) {
   color: #111827;
   line-height: 1.45;
   margin-top: 1.6em;
   margin-bottom: 0.65em;
   break-after: avoid;
+  unicode-bidi: isolate;
 }
 
 h1 {
@@ -67,17 +110,34 @@ a {
 }
 
 blockquote {
-  border-right: 4px solid #d1d5db;
+  border-inline-start: 4px solid #d1d5db;
+  border-inline-end: none;
   margin: 1em 0;
-  padding: 0.3em 1em;
+  padding-inline-start: 1em;
+  padding-inline-end: 0.5em;
+  padding-block: 0.3em;
   color: #4b5563;
   background: #f9fafb;
 }
 
 ul,
 ol {
-  padding-right: 1.6em;
-  padding-left: 0;
+  padding-inline-start: 1.6em;
+  padding-inline-end: 0;
+}
+
+ul[dir="rtl"],
+ol[dir="rtl"] {
+  padding-inline-start: 1.6em !important;
+  padding-inline-end: 0 !important;
+  direction: rtl !important;
+}
+
+ul[dir="ltr"],
+ol[dir="ltr"] {
+  padding-inline-start: 1.6em !important;
+  padding-inline-end: 0 !important;
+  direction: ltr !important;
 }
 
 table {
@@ -113,12 +173,17 @@ svg {
   height: auto;
 }
 
-pre,
+pre {
+  direction: ltr !important;
+  text-align: left !important;
+  unicode-bidi: isolate !important;
+  font-family: Consolas, "Cascadia Mono", "Courier New", monospace;
+}
+
 code,
 kbd,
 samp {
-  direction: ltr;
-  text-align: left;
+  unicode-bidi: isolate !important;
   font-family: Consolas, "Cascadia Mono", "Courier New", monospace;
 }
 
@@ -217,6 +282,15 @@ blockquote.callout-caution {
 }
 
 /* Pygments Syntax Highlighting */
+.math { direction: ltr; unicode-bidi: isolate; color: inherit; }
+.math.block { overflow-x: auto; padding: 1rem .5rem; margin: 1rem 0;
+  text-align: center; break-inside: avoid; }
+.math math { font-family: "Cambria Math", "STIX Two Math", math;
+  font-size: 1.15em; color: inherit; direction: ltr; }
+.math math[display="block"] { margin: 0 auto; width: max-content; }
+.math menclose[notation="box"] { border: 1px solid currentColor; padding: .15em .3em; }
+.math-error { white-space: pre-wrap; overflow-wrap: anywhere; }
+
 pre code .k, pre code .kd, pre code .kn, pre code .kr { color: #007020; font-weight: bold; } /* Keywords */
 pre code .kt { color: #902000; font-weight: bold; } /* Type */
 pre code .s, pre code .s1, pre code .s2, pre code .sb, pre code .sc, pre code .sd { color: #ba2121; } /* Strings */
@@ -227,3 +301,19 @@ pre code .nc, pre code .nn { color: #0e84b5; font-weight: bold; } /* Classes / N
 pre code .o, pre code .ow { color: #555555; } /* Operators */
 pre code .nb, pre code .bp { color: #007020; } /* Builtins */
 pre code .na, pre code .nv, pre code .vi, pre code .vg { color: #19177c; } /* Attributes / Variables */
+
+@media screen {
+  .md-table-scroll { max-width: 100%; overflow-x: auto; }
+}
+.task-list-item { list-style-type: none; }
+.task-list-item-checkbox { margin-inline: 0 .4em; }
+.footnotes { margin-block-start: 2em; font-size: .92em; }
+
+@media print {
+  .math.block { overflow: visible; }
+  .md-table-scroll { overflow: visible; }
+  .md-table-scroll table { width: 100%; table-layout: fixed; }
+  .md-table-scroll :is(th, td) { overflow-wrap: anywhere; }
+  .md-table-scroll pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+  thead { display: table-header-group; }
+}

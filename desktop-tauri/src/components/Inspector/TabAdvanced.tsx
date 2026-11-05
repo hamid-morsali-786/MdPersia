@@ -45,7 +45,7 @@ export const TabAdvanced: React.FC<TabAdvancedProps> = ({ options, onChange }) =
             type="checkbox"
             checked={options.recursive}
             onChange={(e) => onChange('recursive', e.target.checked)}
-            className="rounded border-input bg-input text-blue-600 focus:ring-0"
+            className="rounded border-input bg-input text-blue-600"
           />
           <span>پویش تو در تو و بازگشتی پوشه‌ها (Recursive)</span>
         </label>
@@ -55,7 +55,7 @@ export const TabAdvanced: React.FC<TabAdvancedProps> = ({ options, onChange }) =
             type="checkbox"
             checked={options.keepHtml}
             onChange={(e) => onChange('keepHtml', e.target.checked)}
-            className="rounded border-input bg-input text-blue-600 focus:ring-0"
+            className="rounded border-input bg-input text-blue-600"
           />
           <span>حفظ فایل‌های واسط HTML بعد از تبدیل</span>
         </label>
@@ -65,7 +65,7 @@ export const TabAdvanced: React.FC<TabAdvancedProps> = ({ options, onChange }) =
             type="checkbox"
             checked={options.failFast}
             onChange={(e) => onChange('failFast', e.target.checked)}
-            className="rounded border-input bg-input text-blue-600 focus:ring-0"
+            className="rounded border-input bg-input text-blue-600"
           />
           <span>توقف فوری دسته تبدیل در اولین خطای رخ داده (Fail Fast)</span>
         </label>
@@ -75,7 +75,7 @@ export const TabAdvanced: React.FC<TabAdvancedProps> = ({ options, onChange }) =
             type="checkbox"
             checked={options.verbose}
             onChange={(e) => onChange('verbose', e.target.checked)}
-            className="rounded border-input bg-input text-blue-600 focus:ring-0"
+            className="rounded border-input bg-input text-blue-600"
           />
           <span>نمایش گزارش کامل و جزئیات دقیق فرآیند در کنسول (Verbose)</span>
         </label>

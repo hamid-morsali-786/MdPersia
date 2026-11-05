@@ -7,13 +7,10 @@ from __future__ import annotations
 
 from pathlib import Path
 import docx
-import pytest
 
 from fa_md_pdf.docx_builder import (
     DocxBuildOptions,
     build_docx,
-    extract_mermaid_blocks,
-    parse_docx_length,
 )
 
 
@@ -229,7 +226,6 @@ def test_docx_mixed_bidi_and_inline_formatting(tmp_path: Path):
 
 
 def test_docx_page_dimensions_letter_and_legal(tmp_path: Path):
-    from docx.enum.section import WD_ORIENT
 
     md = "# سند"
     out_letter = tmp_path / "letter.docx"

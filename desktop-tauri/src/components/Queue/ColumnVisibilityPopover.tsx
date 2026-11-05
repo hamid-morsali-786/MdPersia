@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { SlidersHorizontal, Check, RotateCcw, Lock } from 'lucide-react';
-import { ColumnKey, QUEUE_COLUMNS } from './queueTypes';
+import { ColumnKey, QUEUE_COLUMNS, DEFAULT_VISIBLE_COLUMNS } from './queueTypes';
+import { Tooltip } from '../Tooltip';
 
 interface ColumnVisibilityPopoverProps {
   visibleColumns: Set<ColumnKey>;
@@ -40,30 +41,34 @@ export const ColumnVisibilityPopover: React.FC<ColumnVisibilityPopoverProps> = (
 
   const visibleCount = visibleColumns.size;
   const totalCount = QUEUE_COLUMNS.length;
-  const isCustomized = visibleCount < totalCount;
+  const isCustomized =
+    visibleCount !== DEFAULT_VISIBLE_COLUMNS.length ||
+    DEFAULT_VISIBLE_COLUMNS.some((col) => !visibleColumns.has(col));
 
   return (
-    <div className="relative inline-block" ref={containerRef}>
-      <button
-        type="button"
-        onClick={() => setIsOpen((prev) => !prev)}
-        className={`flex items-center gap-1.5 px-2 py-1 rounded text-xs transition-colors cursor-pointer border ${
-          isOpen
-            ? 'bg-hover text-main border-blue-500/50 shadow-sm'
-            : isCustomized
-            ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30'
-            : 'bg-subtle hover:bg-hover text-muted hover:text-main border-main'
-        }`}
-        title="انتخاب و مدیریت نمایش ستون‌های جدول"
-      >
-        <SlidersHorizontal className="w-3.5 h-3.5 text-muted" />
-        <span className="font-medium">ستون‌ها</span>
-        {isCustomized && (
-          <span className="text-[10px] px-1 rounded bg-blue-500/20 text-blue-600 dark:text-blue-400 font-mono">
-            {visibleCount}/{totalCount}
-          </span>
-        )}
-      </button>
+    <div className="relative inline-block shrink-0" ref={containerRef}>
+      <Tooltip label="نمایش و پنهان‌کردن ستون‌های جدول صف">
+        <button
+          type="button"
+          onClick={() => setIsOpen((prev) => !prev)}
+          aria-expanded={isOpen}
+          aria-label="ستون‌های جدول"
+          className={`btn p-1.5 rounded text-xs border ${
+            isOpen
+              ? 'bg-hover text-main border-blue-500/50 shadow-sm'
+              : isCustomized
+              ? 'bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/30'
+              : 'bg-subtle hover:bg-hover text-muted hover:text-main border-main'
+          }`}
+        >
+          <SlidersHorizontal className="w-3.5 h-3.5" />
+          {isCustomized && (
+            <span className="text-[10px] px-1 rounded bg-blue-500/20 text-blue-600 dark:text-blue-400 font-mono">
+              {visibleCount}/{totalCount}
+            </span>
+          )}
+        </button>
+      </Tooltip>
 
       {isOpen && (
         <div
@@ -93,7 +98,7 @@ export const ColumnVisibilityPopover: React.FC<ColumnVisibilityPopoverProps> = (
                       checked={isChecked}
                       disabled={col.required}
                       onChange={() => onToggleColumn(col.id)}
-                      className="rounded border-input bg-input text-blue-600 focus:ring-0 cursor-pointer disabled:cursor-not-allowed"
+                      className="rounded border-input bg-input text-blue-600 cursor-pointer disabled:cursor-not-allowed"
                     />
                     <span className="text-main font-medium">{col.label}</span>
                   </div>
