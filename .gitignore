@@ -24,3 +24,5 @@ desktop-tauri/dist/
 .archify/
 .kiro/
 
+# Generated visual QA references stay local.
+tests/visual/

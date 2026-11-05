@@ -54,6 +54,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+visual = ["Pillow>=10,<13"]
 dev = [
   "pytest>=8,<9",
   "ruff>=0.4"
