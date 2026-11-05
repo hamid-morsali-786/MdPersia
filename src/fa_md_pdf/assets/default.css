@@ -308,3 +308,12 @@ pre code .na, pre code .nv, pre code .vi, pre code .vg { color: #19177c; } /* At
 .task-list-item { list-style-type: none; }
 .task-list-item-checkbox { margin-inline: 0 .4em; }
 .footnotes { margin-block-start: 2em; font-size: .92em; }
+
+@media print {
+  .math.block { overflow: visible; }
+  .md-table-scroll { overflow: visible; }
+  .md-table-scroll table { width: 100%; table-layout: fixed; }
+  .md-table-scroll :is(th, td) { overflow-wrap: anywhere; }
+  .md-table-scroll pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+  thead { display: table-header-group; }
+}

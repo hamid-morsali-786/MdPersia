@@ -8,6 +8,7 @@ from xml.etree import ElementTree as ET
 from latex2mathml.converter import convert
 from markdown_it import MarkdownIt
 from mdit_py_plugins.dollarmath import dollarmath_plugin
+from mdit_py_plugins.dollarmath.index import math_block_dollar
 
 
 def normalize_tex(source: str) -> str:
@@ -51,3 +52,18 @@ def render_math(source: str, options: dict) -> str:
 def math_plugin(renderer: MarkdownIt) -> None:
     renderer.use(dollarmath_plugin, renderer=render_math, allow_labels=False,
                  allow_space=False, allow_digits=False)
+    original = math_block_dollar(allow_labels=False)
+
+    def block(state, start, end, silent):
+        matched = original(state, start, end, silent)
+        if matched and not silent:
+            token = state.tokens[-1]
+            # The upstream rule slices raw source across lines, retaining quote
+            # markers. Read the parser's adjusted line offsets inside containers.
+            lines = [state.src[state.bMarks[i] + state.tShift[i]:state.eMarks[i]]
+                     for i in range(start, state.line)]
+            content = "\n".join(lines)[2:]
+            token.content = content.rsplit("$$", 1)[0]
+        return matched
+
+    renderer.block.ruler.at("math_block", block)

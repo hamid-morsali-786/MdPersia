@@ -9,7 +9,8 @@ a = Analysis(
     pathex=[str(root / 'src')],
     binaries=pw_binaries,
     datas=pw_data + copy_metadata('playwright') + collect_data_files('latex2mathml')
-        + copy_metadata('latex2mathml') + copy_metadata('mdit-py-plugins') + [
+        + copy_metadata('latex2mathml') + copy_metadata('mdit-py-plugins')
+        + copy_metadata('mathml2omml') + [
         (str(root / 'src/fa_md_pdf/assets'), 'fa_md_pdf/assets'),
     ],
     hiddenimports=pw_imports + collect_submodules('pygments.lexers')

@@ -56,6 +56,7 @@ def main() -> None:
     if python_license.is_file():
         shutil.copy2(python_license, licenses / 'Python.txt')
     for package in ('playwright', 'greenlet', 'pyee', 'markdown-it-py', 'mdurl',
+                    'latex2mathml', 'mathml2omml', 'mdit-py-plugins',
                     'python-docx', 'lxml', 'Pygments', 'typing_extensions', 'pyinstaller'):
         dist = distribution(package)
         for file in dist.files or []:

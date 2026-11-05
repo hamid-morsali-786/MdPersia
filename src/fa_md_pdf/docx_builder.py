@@ -1,7 +1,11 @@
 from __future__ import annotations
-from .rtl_wrapper import has_persian
+from .rtl_wrapper import has_persian, classify_block_direction
+from .word_math import append_equation
 
 import re
+import hashlib
+from urllib.parse import unquote, urlsplit
+from urllib.request import url2pathname
 from dataclasses import dataclass, replace
 from html.parser import HTMLParser
 from pathlib import Path
@@ -18,7 +22,7 @@ from markdown_it.token import Token
 
 from .html_builder import (
     EMOJI_PATTERN,
-    extract_title,
+    build_markdown_renderer,
     strip_emojis,
     strip_front_matter,
 )
@@ -46,7 +50,9 @@ def _clean_xml_text(text: str) -> str:
 HEADING_SIZES = {1: 22, 2: 18, 3: 15, 4: 13, 5: 12, 6: 11}
 
 PAGE_FORMAT_DIMENSIONS: dict[str, tuple[float, float]] = {
+    "A3": (297.0, 420.0),
     "A4": (210.0, 297.0),
+    "A5": (148.0, 210.0),
     "LETTER": (215.9, 279.4),
     "LEGAL": (215.9, 355.6),
 }
@@ -375,14 +381,15 @@ def _add_hyperlink_run(
     """Add a native Word hyperlink to a paragraph with emoji support."""
     try:
         from docx.opc.constants import RELATIONSHIP_TYPE
-        from docx.oxml import parse_xml
 
         part = paragraph.part
-        r_id = part.relate_to(href, RELATIONSHIP_TYPE.HYPERLINK, is_external=True)
-        hyperlink = parse_xml(
-            f'<w:hyperlink xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" '
-            f'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:id="{r_id}"/>'
-        )
+        from docx.oxml import OxmlElement
+        hyperlink = OxmlElement("w:hyperlink")
+        if href.startswith("#"):
+            hyperlink.set(qn("w:anchor"), _bookmark_name(href[1:]))
+        else:
+            r_id = part.relate_to(href, RELATIONSHIP_TYPE.HYPERLINK, is_external=True)
+            hyperlink.set(qn("r:id"), r_id)
         paragraph._p.append(hyperlink)
 
         base_style = RunStyle(
@@ -433,8 +440,13 @@ def _calculate_image_width(img_px_width: int, options: DocxBuildOptions) -> floa
 
 def _resolve_image_file(src: str, source_path: Path) -> Path | None:
     """Resolve relative or absolute local image file path."""
-    if not src or src.startswith(("http://", "https://", "data:")):
+    if not src or src.lower().startswith(("http://", "https://", "data:")):
         return None
+    if src.lower().startswith("file:"):
+        url = urlsplit(src)
+        src = url2pathname(("//" + url.netloc if url.netloc else "") + url.path)
+    else:
+        src = unquote(src)
     candidate = (source_path.parent / src).resolve()
     if candidate.is_file():
         return candidate
@@ -453,6 +465,9 @@ def _embed_image_picture(paragraph: "Paragraph", image_path: Path, options: Docx
 
         img = DocxImage.from_file(str(image_path))
         target_w = _calculate_image_width(img.px_width, options)
+        w_mm, h_mm = PAGE_FORMAT_DIMENSIONS.get(options.page_format.upper(), (210.0, 297.0))
+        usable_height = (w_mm if options.landscape else h_mm) / 25.4 - 2 * parse_docx_length(options.margin).inches - .3
+        target_w = min(target_w, max(.1, usable_height) * img.px_width / img.px_height)
         run = paragraph.add_run()
         run.add_picture(str(image_path), width=Inches(target_w))
         return True
@@ -628,12 +643,18 @@ def _render_inline_tokens(
     bold_stack = [base_bold]
     italic_stack = [False]
     ltr_stack = [False]
+    strike = False
 
     for token in tokens:
         kind = token.type
+        previous_children = len(paragraph._p)
 
         if kind == "html_inline":
             content_lower = token.content.lower()
+            if 'task-list-item-checkbox' in content_lower:
+                _add_styled_run(paragraph, "☒ " if 'checked="checked"' in content_lower else "☐ ",
+                                font_name="Segoe UI Symbol", rtl=False)
+                continue
             if 'dir="ltr"' in content_lower or "dir='ltr'" in content_lower or "<bdi" in content_lower:
                 ltr_stack.append(True)
             elif 'dir="rtl"' in content_lower or "dir='rtl'" in content_lower:
@@ -644,7 +665,16 @@ def _render_inline_tokens(
                 _handle_html_inline_image(paragraph, token.content, options)
             continue
 
-        if kind == "text":
+        if kind in {"math_inline", "math_block"}:
+            append_equation(paragraph, _clean_xml_text(token.content), display=kind == "math_block")
+        elif kind == "footnote_ref":
+            from docx.oxml import OxmlElement
+            ref = OxmlElement("w:footnoteReference")
+            ref.set(qn("w:id"), str(token.meta["id"] + 1))
+            run = paragraph.add_run()
+            run.font.superscript = True
+            run._r.append(ref)
+        elif kind == "text":
             text = token.content
             if not text:
                 continue
@@ -682,15 +712,15 @@ def _render_inline_tokens(
             run.add_break()
 
         elif kind == "code_inline":
-            _add_styled_run(
-                paragraph,
-                token.content,
-                font_name=options.font_family,
-                font_size_pt=base_size,
-                code=True,
-                rtl=False,
-            )
-            paragraph._link_has_text = True  # type: ignore[attr-defined]
+            href = getattr(paragraph, "_link_href", None)
+            if href:
+                _add_hyperlink_run(paragraph, token.content, href,
+                                   font_name=DEFAULT_DOCX_CODE_FONT,
+                                   font_size_pt=base_size, rtl=False)
+            else:
+                _add_styled_run(paragraph, token.content, font_name=options.font_family,
+                                font_size_pt=base_size, code=True, rtl=False)
+            paragraph._link_has_text = True
 
         elif kind == "strong_open":
             bold_stack.append(True)
@@ -720,40 +750,44 @@ def _render_inline_tokens(
             _add_image_to_paragraph(paragraph, src, alt, options)
 
         elif kind == "s_open":
-            # strikethrough not commonly used; ignore for now
-            pass
+            strike = True
+        elif kind == "s_close":
+            strike = False
+
+        if strike:
+            from docx.text.run import Run
+            for element in list(paragraph._p)[previous_children:]:
+                for run_element in element.iter(qn("w:r")):
+                    Run(run_element, paragraph).font.strike = True
 
 
 # ─── Mermaid extraction (without HTML conversion) ──────────────────
 
-MERMAID_FENCE_RE = re.compile(
-    r"(?ms)(^|\n)(?P<fence>`{3,}|~{3,})[ \t]*mermaid[^\n]*\n(?P<code>.*?)(?:\n(?P=fence)[ \t]*(?=\n|$))"
-)
-
-
 def extract_mermaid_blocks(text: str) -> tuple[str, list[str]]:
-    """
-    Extract mermaid code blocks and replace them with placeholder fences.
-    Returns (modified_text, list_of_mermaid_codes).
-    """
-    blocks: list[str] = []
-
-    def repl(match: re.Match[str]) -> str:
-        code = match.group("code").strip()
-        idx = len(blocks)
-        blocks.append(code)
-        # Use a marker fence that markdown-it parses as a special code block
-        return f"\n\n```__mermaid_placeholder__\n__MERMAID_PLACEHOLDER__{idx}__\n```\n\n"
-
-    modified = MERMAID_FENCE_RE.sub(repl, text)
-    return modified, blocks
+    """Discover actual fences, never Mermaid examples inside another code fence."""
+    tokens = _build_renderer().parse(strip_front_matter(text))
+    return text, [t.content.strip() for t in tokens
+                  if t.type == "fence" and t.info.strip().lower() == "mermaid"]
 
 
 def _build_renderer() -> MarkdownIt:
-    renderer = MarkdownIt("default", {"html": True, "breaks": True, "typographer": True})
-    renderer.enable("table")
-    renderer.enable("strikethrough")
-    return renderer
+    return build_markdown_renderer()
+
+
+def _bookmark_name(slug: str) -> str:
+    # Word bookmark names cannot contain arbitrary Unicode/punctuation.
+    return "md_" + hashlib.sha256(unquote(slug).encode("utf8")).hexdigest()[:32]
+
+
+def _add_bookmark(paragraph, slug: str, identifier: int) -> None:
+    from docx.oxml import OxmlElement
+    start = OxmlElement("w:bookmarkStart")
+    start.set(qn("w:id"), str(identifier))
+    start.set(qn("w:name"), _bookmark_name(slug))
+    end = OxmlElement("w:bookmarkEnd")
+    end.set(qn("w:id"), str(identifier))
+    paragraph._p.append(start)
+    paragraph._p.append(end)
 
 
 # ─── Block rendering ───────────────────────────────────────────────
@@ -765,8 +799,8 @@ def _add_heading(
     inline_token: Token,
     options: DocxBuildOptions,
 ) -> None:
-    paragraph = document.add_paragraph()
-    has_fa = has_persian(inline_token.content or "") if options.rtl else False
+    paragraph = document.add_paragraph(style=f"Heading {level}")
+    has_fa = options.rtl and classify_block_direction(inline_token.content) == "rtl"
     if has_fa:
         _set_paragraph_rtl(paragraph)
     else:
@@ -805,7 +839,7 @@ def _add_paragraph_block(
         t.type == "image" or (t.type == "html_inline" and "<img" in t.content.lower())
         for t in children
     )
-    has_fa = has_persian(inline_token.content or "") if options.rtl else False
+    has_fa = options.rtl and classify_block_direction(inline_token.content) == "rtl"
     if has_image:
         paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
     elif has_fa:
@@ -1026,9 +1060,10 @@ def _add_list_item(
     ordered: bool,
     index: int,
     level: int,
+    continuation: bool = False,
 ) -> None:
     paragraph = document.add_paragraph()
-    is_item_rtl = options.rtl
+    is_item_rtl = options.rtl and classify_block_direction(inline_token.content) == "rtl"
     if is_item_rtl:
         _set_paragraph_rtl(paragraph)
         paragraph.paragraph_format.right_indent = Inches(0.25 * (level + 1))
@@ -1037,7 +1072,9 @@ def _add_list_item(
         paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
         paragraph.paragraph_format.left_indent = Inches(0.25 * (level + 1))
 
-    bullet = f"{index}. " if ordered else "• "
+    task = any(t.type == "html_inline" and "task-list-item-checkbox" in t.content
+               for t in inline_token.children or [])
+    bullet = "" if task or continuation else (f"{index}. " if ordered else "• ")
     _add_styled_run(
         paragraph,
         bullet,
@@ -1086,7 +1123,7 @@ def _add_mermaid_image(
 
         with open(image_path, "rb") as f:
             header = f.read(24)
-        img_width = struct.unpack(">I", header[16:20])[0]
+        img_width, img_height = struct.unpack(">II", header[16:24])
 
         # PNGs are rendered at options.image_scale * 96 DPI.
         # Compute natural CSS width and clamp between min and max.
@@ -1102,6 +1139,8 @@ def _add_mermaid_image(
             max_limit,
         )
 
+        usable_height = (w_mm if options.landscape else h_mm) / 25.4 - 2 * margin_in - .3
+        target_width = min(target_width, max(.1, usable_height) * img_width / img_height)
         run.add_picture(str(image_path), width=Inches(target_width))
     except Exception as exc:  # noqa: BLE001
         _add_styled_run(
@@ -1150,6 +1189,7 @@ def _add_table_from_tokens(
     """
     rows: list[list[list[Token]]] = []  # rows -> cells -> inline children
     current_row: list[list[Token]] = []
+    alignments: list[str | None] = []
 
     i = start_index + 1  # skip table_open
     while i < len(tokens):
@@ -1164,6 +1204,8 @@ def _add_table_from_tokens(
         elif token.type == "tr_close":
             rows.append(current_row)
         elif token.type in ("th_open", "td_open"):
+            if token.type == "th_open":
+                alignments.append(token.attrGet("style"))
             # next token should be inline
             if i + 1 < len(tokens) and tokens[i + 1].type == "inline":
                 current_row.append(tokens[i + 1].children or [])
@@ -1179,9 +1221,17 @@ def _add_table_from_tokens(
 
     table = document.add_table(rows=len(rows), cols=cols)
     table.style = "Light Grid Accent 1"
+    table.autofit = False
+    section = document.sections[0]
+    width = (section.page_width - section.left_margin - section.right_margin) // cols
+    for column in table.columns:
+        column.width = width
+    for row in table.rows:
+        for cell in row.cells:
+            cell.width = width
 
-    # Right-to-left table layout
-    if options.rtl:
+    # Preserve column order for English tables even in a Persian document.
+    if options.rtl and tokens[start_index].attrGet("dir") == "rtl":
         tbl = table._tbl
         tblPr = tbl.find(qn("w:tblPr"))
         if tblPr is not None:
@@ -1197,9 +1247,16 @@ def _add_table_from_tokens(
             # Clear default empty paragraph
             paragraph = cell.paragraphs[0]
             paragraph.text = ""
-            if options.rtl:
+            text = " ".join(t.content for t in inline_tokens)
+            if options.rtl and classify_block_direction(text) == "rtl":
                 _set_paragraph_rtl(paragraph)
-                # Don't set jc; bidi handles alignment
+            else:
+                _set_paragraph_ltr(paragraph)
+            align = alignments[col_idx] if col_idx < len(alignments) else None
+            if align:
+                paragraph.alignment = {"text-align:left": WD_ALIGN_PARAGRAPH.LEFT,
+                    "text-align:center": WD_ALIGN_PARAGRAPH.CENTER,
+                    "text-align:right": WD_ALIGN_PARAGRAPH.RIGHT}.get(align)
 
             is_header = row_idx == 0
             if is_header and col_idx == 0:
@@ -1221,18 +1278,6 @@ def _add_table_from_tokens(
 # ─── Main build function ───────────────────────────────────────────
 
 
-def _is_mermaid_placeholder_block(token: Token) -> tuple[bool, int | None]:
-    """Check if a fence token is a mermaid placeholder. Returns (is_placeholder, index)."""
-    if token.type != "fence":
-        return False, None
-    if (token.info or "").strip() != "__mermaid_placeholder__":
-        return False, None
-    match = re.search(r"__MERMAID_PLACEHOLDER__(\d+)__", token.content)
-    if not match:
-        return False, None
-    return True, int(match.group(1))
-
-
 def build_docx(
     markdown_text: str,
     options: DocxBuildOptions,
@@ -1247,13 +1292,12 @@ def build_docx(
     if options.strip_emojis:
         markdown_text = strip_emojis(markdown_text)
     text = strip_front_matter(markdown_text)
-    title = extract_title(text, options.source_path.stem)
-
-    # Extract mermaid blocks before parsing
-    text_with_placeholders, mermaid_blocks = extract_mermaid_blocks(text)
-
     renderer = _build_renderer()
-    tokens = renderer.parse(text_with_placeholders)
+    env = {}
+    tokens = renderer.parse(text, env)
+    title = env.get("document_title", options.source_path.stem)
+    mermaid_blocks = [t.content.strip() for t in tokens
+                      if t.type == "fence" and t.info.strip().lower() == "mermaid"]
 
     document = Document()
     _set_document_default_rtl(document, options.font_family, options.font_size_pt)
@@ -1318,10 +1362,25 @@ def build_docx(
                     parse_xml(r'<w:fldSimple xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" w:instr="NUMPAGES"/>')
                 )
 
+    document.core_properties.title = _clean_xml_text(title)[:255]
+    _render_blocks(document, tokens, options)
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    document.save(str(output_path))
+
+    return DocxBuildResult(
+        title=title,
+        has_mermaid=bool(mermaid_blocks),
+        mermaid_blocks=mermaid_blocks,
+    )
+
+
+def _render_blocks(document, tokens: list[Token], options: DocxBuildOptions) -> None:
     # Walk tokens
     i = 0
     list_levels: list[bool] = []  # stack of ordered flags
     list_indices: list[int] = []  # stack of current index per list
+    item_first: list[bool] = []
 
     while i < len(tokens):
         token = tokens[i]
@@ -1331,16 +1390,23 @@ def build_docx(
             level = int(kind[-1]) if kind[-1].isdigit() else int(token.tag[1:])
             if i + 1 < len(tokens) and tokens[i + 1].type == "inline":
                 _add_heading(document, level, tokens[i + 1], options)
+                _add_bookmark(document.paragraphs[-1], token.attrGet("id") or "section",
+                              len(document.paragraphs))
             i += 3  # heading_open, inline, heading_close
             continue
 
         if kind == "paragraph_open":
             if i + 1 < len(tokens) and tokens[i + 1].type == "inline":
                 inline = tokens[i + 1]
+                if inline.content.strip() == r"\pagebreak":
+                    document.add_page_break()
+                    i += 3
+                    continue
                 # Check if inside a list item
                 if list_levels:
                     ordered = list_levels[-1]
-                    list_indices[-1] += 1
+                    first = item_first[-1]
+                    item_first[-1] = False
                     _add_list_item(
                         document,
                         inline,
@@ -1348,16 +1414,25 @@ def build_docx(
                         ordered=ordered,
                         index=list_indices[-1],
                         level=len(list_levels) - 1,
+                        continuation=not first,
                     )
                 else:
                     _add_paragraph_block(document, inline, options)
             i += 3  # paragraph_open, inline, paragraph_close
             continue
 
+        if kind == "math_block":
+            paragraph = document.add_paragraph()
+            _set_paragraph_ltr(paragraph)
+            paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            paragraph.paragraph_format.keep_together = True
+            append_equation(paragraph, _clean_xml_text(token.content), display=True)
+            i += 1
+            continue
+
         if kind == "fence" or kind == "code_block":
-            is_mermaid, mermaid_idx = _is_mermaid_placeholder_block(token)
-            if is_mermaid and mermaid_idx is not None and mermaid_idx < len(mermaid_blocks):
-                mermaid_code = mermaid_blocks[mermaid_idx]
+            if kind == "fence" and token.info.strip().lower() == "mermaid":
+                mermaid_code = token.content.strip()
                 if options.mermaid_images and mermaid_code in options.mermaid_images:
                     _add_mermaid_image(
                         document, options.mermaid_images[mermaid_code], options
@@ -1377,7 +1452,7 @@ def build_docx(
             continue
         if kind == "ordered_list_open":
             list_levels.append(True)
-            list_indices.append(0)
+            list_indices.append(int(token.attrGet("start") if token.attrGet("start") is not None else 1) - 1)
             i += 1
             continue
         if kind in ("bullet_list_close", "ordered_list_close"):
@@ -1388,6 +1463,12 @@ def build_docx(
             continue
 
         if kind in ("list_item_open", "list_item_close"):
+            if kind == "list_item_open":
+                item_first.append(True)
+                if list_indices:
+                    list_indices[-1] += 1
+            elif item_first:
+                item_first.pop()
             i += 1
             continue
 
@@ -1405,7 +1486,22 @@ def build_docx(
                 elif tokens[j].type == "inline":
                     inlines.append(tokens[j].children or [])
                 j += 1
-            _add_blockquote(document, inlines, options)
+            nested = tokens[i + 1:j]
+            if any(t.type in {"math_block", "fence", "code_block", "table_open",
+                              "heading_open", "bullet_list_open", "ordered_list_open", "hr"}
+                   for t in nested):
+                before = len(document.paragraphs)
+                if (len(nested) >= 3 and nested[0].type == "paragraph_open"
+                        and re.match(r"^\s*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]",
+                                     nested[1].content, re.IGNORECASE)):
+                    _add_blockquote(document, [nested[1].children or []], options)
+                    nested = nested[3:]
+                _render_blocks(document, nested, options)
+                for paragraph in document.paragraphs[before:]:
+                    paragraph.paragraph_format.left_indent = Inches(.3)
+                    paragraph.paragraph_format.right_indent = Inches(.3)
+            else:
+                _add_blockquote(document, inlines, options)
             i = j + 1
             continue
 
@@ -1423,14 +1519,67 @@ def build_docx(
             i += 1
             continue
 
+        if kind == "footnote_block_open":
+            _add_footnotes(document, tokens[i + 1:], options)
+            break
+
         # Skip unknown tokens
         i += 1
 
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    document.save(str(output_path))
 
-    return DocxBuildResult(
-        title=title,
-        has_mermaid=bool(mermaid_blocks),
-        mermaid_blocks=mermaid_blocks,
-    )
+
+def _add_footnotes(document, tokens, options):
+    """Emit real Word footnotes, including math, images and external link relations."""
+    from copy import deepcopy
+    from docx.oxml import OxmlElement
+    from docx.opc.part import Part
+    from docx.opc.packuri import PackURI
+    from docx.opc.constants import RELATIONSHIP_TYPE as RT, CONTENT_TYPE as CT
+    from lxml import etree
+
+    root = OxmlElement("w:footnotes")
+    part = Part(PackURI("/word/footnotes.xml"), CT.WML_FOOTNOTES, b"", document.part.package)
+    for identifier, kind in [(-1, "separator"), (0, "continuationSeparator")]:
+        footnote = OxmlElement("w:footnote")
+        footnote.set(qn("w:id"), str(identifier))
+        footnote.set(qn("w:type"), kind)
+        p = OxmlElement("w:p")
+        r = OxmlElement("w:r")
+        r.append(OxmlElement("w:" + kind))
+        p.append(r)
+        footnote.append(p)
+        root.append(footnote)
+    i = 0
+    while i < len(tokens):
+        token = tokens[i]
+        if token.type != "footnote_open":
+            i += 1
+            continue
+        j = i + 1
+        while j < len(tokens) and tokens[j].type != "footnote_close":
+            j += 1
+        note = Document()
+        _render_blocks(note, tokens[i + 1:j], options)
+        if not note.paragraphs:
+            note.add_paragraph()
+        marker = OxmlElement("w:r")
+        marker.append(OxmlElement("w:footnoteRef"))
+        note.paragraphs[0]._p.insert(1 if note.paragraphs[0]._p.pPr is not None else 0, marker)
+        footnote = OxmlElement("w:footnote")
+        footnote.set(qn("w:id"), str(token.meta["id"] + 1))
+        for child in note._element.body:
+            if child.tag == qn("w:sectPr"):
+                continue
+            element = deepcopy(child)
+            for node in element.iter():
+                for attr in (qn("r:id"), qn("r:embed"), qn("r:link")):
+                    old = node.get(attr)
+                    if old:
+                        rel = note.part.rels[old]
+                        target = rel.target_ref if rel.is_external else rel.target_part
+                        node.set(attr, part.relate_to(target, rel.reltype, rel.is_external))
+            footnote.append(element)
+        root.append(footnote)
+        i = j + 1
+    part._blob = etree.tostring(root, xml_declaration=True, encoding="UTF-8", standalone=True)
+    document.part.relate_to(part, RT.FOOTNOTES)
