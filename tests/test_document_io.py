@@ -132,3 +132,14 @@ def test_editor_refuses_non_markdown_and_invalid_revisions(tmp_path):
     with pytest.raises(DocumentError):
         save_document(str(tmp_path / "valid.md"), "oops", "invalid revision")
     assert not list(tmp_path.iterdir())
+
+
+def test_save_new_file_fallback_when_os_link_unsupported(tmp_path, monkeypatch):
+    target = tmp_path / "new_doc.md"
+    def fail_link(src, dst):
+        raise OSError(1, "Incorrect function")
+    monkeypatch.setattr(os, "link", fail_link)
+    saved = save_document(str(target), "# Content", None)
+    assert saved["path"] == str(target.resolve())
+    assert target.is_file()
+    assert target.read_text(encoding="utf-8") == "# Content"

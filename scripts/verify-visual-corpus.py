@@ -19,7 +19,12 @@ def compare(actual, expected, diff_path):
         if a.size != b.size:
             raise AssertionError(f'Page size changed: {actual}')
         diff = ImageChops.difference(a, b)
-        changed = sum(any(v > 16 for v in pixel) for pixel in diff.getdata()) / (a.width * a.height)
+        colors = diff.getcolors(maxcolors=a.width * a.height)
+        if colors is not None:
+            changed_pixels = sum(count for count, pixel in colors if any(v > 16 for v in pixel))
+        else:
+            changed_pixels = sum(any(v > 16 for v in pixel) for pixel in diff.getdata())
+        changed = changed_pixels / (a.width * a.height)
         mean = sum(ImageStat.Stat(diff).mean) / 3
         if changed > .002 or mean > .5:
             diff.save(diff_path)

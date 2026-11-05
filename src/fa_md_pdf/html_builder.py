@@ -469,44 +469,64 @@ def _transform_pagebreaks(html_str: str) -> str:
                    for index, part in enumerate(parts))
 
 
+def _fix_li_inner(content: str) -> str:
+    lead_ws = content[:len(content) - len(content.lstrip())]
+    trail_ws = content[len(content.rstrip()):]
+    inner = content.strip()
+    if not inner:
+        return content
+
+    if not has_persian(inner):
+        return f"{lead_ws}<bdi>{inner}</bdi>{trail_ws}"
+
+    # Has Persian: check if it opens with a Latin key + colon
+    m1 = re.match(r"^(\s*<code>[A-Za-z0-9_.-]+</code>\s*:\s*)(.*)$", inner, re.DOTALL)
+    if m1:
+        return f"{lead_ws}<bdi>{m1.group(1).rstrip()}</bdi> {m1.group(2).lstrip()}{trail_ws}"
+
+    m2 = re.match(r"^(\s*<code>[A-Za-z0-9_.-]+:\s*</code>)(.*)$", inner, re.DOTALL)
+    if m2:
+        return f"{lead_ws}<bdi>{m2.group(1).rstrip()}</bdi> {m2.group(2).lstrip()}{trail_ws}"
+
+    m3 = re.match(r"^(\s*<strong>[A-Za-z0-9_.-]+(?::</strong>|</strong>\s*:)\s*)(.*)$", inner, re.DOTALL)
+    if m3:
+        return f"{lead_ws}<bdi>{m3.group(1).rstrip()}</bdi> {m3.group(2).lstrip()}{trail_ws}"
+
+    m4 = re.match(r"^(\s*[A-Za-z0-9_.-]+\s*:\s*)(.*)$", inner, re.DOTALL)
+    if m4:
+        return f"{lead_ws}<bdi>{m4.group(1).rstrip()}</bdi> {m4.group(2).lstrip()}{trail_ws}"
+
+    return content
+
+
 def fix_bidi_list_items(html_content: str) -> str:
     """
     Ensure list items in RTL contexts properly isolate leading Latin keys/codes with colons,
     and ensure pure Latin list items inside RTL lists render cleanly without colon inversion.
+    Handles nested lists without breaking HTML hierarchy.
     """
-    def fix_li(match: re.Match[str]) -> str:
-        li_open = match.group(1)
-        content = match.group(2)
-        li_close = match.group(3)
+    tokens = re.split(r"(</li>|<li\b[^>]*>|<ul\b[^>]*>|</ul>|<ol\b[^>]*>|</ol>)", html_content, flags=re.IGNORECASE)
+    result = []
+    in_li_direct = False
 
-        if not has_persian(content):
-            # Pure non-Persian list item: wrap in <bdi> to keep LTR integrity inside RTL list
-            return f"{li_open}<bdi>{content}</bdi>{li_close}"
+    for token in tokens:
+        lower = token.lower()
+        if lower.startswith("<li"):
+            result.append(token)
+            in_li_direct = True
+        elif lower == "</li>":
+            in_li_direct = False
+            result.append(token)
+        elif lower.startswith("<ul") or lower.startswith("<ol"):
+            in_li_direct = False
+            result.append(token)
+        elif in_li_direct and token.strip():
+            result.append(_fix_li_inner(token))
+            in_li_direct = False
+        else:
+            result.append(token)
 
-        # Has Persian: check if it opens with a Latin key + colon
-        # Pattern 1: <code>Word</code>:
-        m1 = re.match(r"^(\s*<code>[A-Za-z0-9_.-]+</code>\s*:\s*)(.*)$", content, re.DOTALL)
-        if m1:
-            return f"{li_open}<bdi>{m1.group(1).rstrip()}</bdi> {m1.group(2).lstrip()}{li_close}"
-
-        # Pattern 2: <code>Word:</code>
-        m2 = re.match(r"^(\s*<code>[A-Za-z0-9_.-]+:\s*</code>)(.*)$", content, re.DOTALL)
-        if m2:
-            return f"{li_open}<bdi>{m2.group(1).rstrip()}</bdi> {m2.group(2).lstrip()}{li_close}"
-
-        # Pattern 3: <strong>Word:</strong> or <strong>Word</strong>:
-        m3 = re.match(r"^(\s*<strong>[A-Za-z0-9_.-]+(?::</strong>|</strong>\s*:)\s*)(.*)$", content, re.DOTALL)
-        if m3:
-            return f"{li_open}<bdi>{m3.group(1).rstrip()}</bdi> {m3.group(2).lstrip()}{li_close}"
-
-        # Pattern 4: Plain Latin Word:
-        m4 = re.match(r"^(\s*[A-Za-z0-9_.-]+\s*:\s*)(.*)$", content, re.DOTALL)
-        if m4:
-            return f"{li_open}<bdi>{m4.group(1).rstrip()}</bdi> {m4.group(2).lstrip()}{li_close}"
-
-        return match.group(0)
-
-    return re.sub(r"(<li\b[^>]*>)(.*?)(</li>)", fix_li, html_content, flags=re.DOTALL | re.IGNORECASE)
+    return "".join(result)
 
 
 def build_html(markdown_text: str, options: HtmlBuildOptions) -> HtmlDocument:

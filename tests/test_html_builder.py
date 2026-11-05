@@ -107,3 +107,18 @@ def test_build_font_css_empty_dir(tmp_path: Path):
     css = build_font_css("Vazirmatn", font_file=None, font_dir=empty_dir)
     assert 'font-family: Vazirmatn;' in css
     assert "@font-face" not in css
+
+
+def test_fix_bidi_nested_list_items_preserves_structure():
+    from fa_md_pdf.html_builder import fix_bidi_list_items
+    html_input = """<ul>
+<li>Parent
+<ul>
+<li>Child 1</li>
+<li>Child 2</li>
+</ul>
+</li>
+</ul>"""
+    output = fix_bidi_list_items(html_input)
+    assert "<li>Child 1</bdi>" not in output
+    assert "<li><bdi>Child 1</bdi></li>" in output

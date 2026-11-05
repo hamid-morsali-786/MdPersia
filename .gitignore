@@ -19,6 +19,8 @@ output/
 **/debug.log
 desktop-tauri/node_modules/
 desktop-tauri/dist/
+desktop-tauri/src-tauri/target/
+desktop-tauri/src-tauri/gen/
 *.docx
 *.rtl.md
 .archify/

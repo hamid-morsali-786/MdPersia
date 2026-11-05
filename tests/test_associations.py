@@ -257,3 +257,16 @@ def test_windowless_launcher_is_preferred_for_double_clicks(tmp_path, monkeypatc
     script = tmp_path / "mdpersia.exe"
     script.write_bytes(b"")
     assert associations._windowless_launcher(script) == script
+
+
+@pytest.mark.skipif(associations.sys.platform != "win32", reason="Windows registry only")
+def test_delete_key_tree_removes_nested_keys():
+    import winreg
+    test_root = r"Software\MdPersia_Test_Key"
+    with winreg.CreateKey(winreg.HKEY_CURRENT_USER, rf"{test_root}\sub1\sub2") as k:
+        winreg.SetValueEx(k, "val", 0, winreg.REG_SZ, "data")
+
+    associations._delete_key_tree(winreg.HKEY_CURRENT_USER, test_root)
+
+    with pytest.raises(FileNotFoundError):
+        winreg.OpenKey(winreg.HKEY_CURRENT_USER, test_root)

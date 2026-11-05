@@ -146,8 +146,12 @@ def save_document(path: str, text: str, revision: str | None, *, utf8: bool = Fa
                 raise DocumentError("CONFLICT", "فایل هنگام ذخیره تغییر کرد؛ اصل فایل بازنویسی نشد.")
             if revision is None:
                 # Exclusive creation avoids an overwrite race when saving a new copy.
-                os.link(temporary, source)
-                os.unlink(temporary)
+                try:
+                    os.link(temporary, source)
+                    os.unlink(temporary)
+                except OSError:
+                    # Fallback for filesystems without hardlink support (e.g. FAT32/exFAT/shares)
+                    os.replace(temporary, source)
             else:
                 os.replace(temporary, source)
             temporary = None

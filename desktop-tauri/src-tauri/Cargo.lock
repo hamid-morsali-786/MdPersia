@@ -967,7 +967,7 @@ dependencies = [
 
 [[package]]
 name = "fa-md-pdf-desktop"
-version = "0.3.0-beta.3"
+version = "0.3.0"
 dependencies = [
  "open",
  "reqwest",

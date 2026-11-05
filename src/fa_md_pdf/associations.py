@@ -113,6 +113,21 @@ def register(exe_path: str | Path, icon_path: str | Path | None = None) -> list[
     return written
 
 
+def _delete_key_tree(root, subkey_path: str) -> None:
+    winreg = _reg()
+    try:
+        with winreg.OpenKey(root, subkey_path, 0, winreg.KEY_ALL_ACCESS) as key:
+            while True:
+                try:
+                    sub = winreg.EnumKey(key, 0)
+                    _delete_key_tree(key, sub)
+                except OSError:
+                    break
+        winreg.DeleteKey(root, subkey_path)
+    except FileNotFoundError:
+        pass
+
+
 def unregister() -> list[str]:
     """Remove only the keys this module creates. Missing keys are skipped."""
     if sys.platform != "win32":
@@ -121,11 +136,9 @@ def unregister() -> list[str]:
     removed: list[str] = []
     for tree in build_uninstall_keys():
         try:
-            parent, _, leaf = tree.rpartition("\\")
-            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, parent, 0, winreg.KEY_ALL_ACCESS) as pk:
-                winreg.DeleteKey(pk, leaf)
+            _delete_key_tree(winreg.HKEY_CURRENT_USER, tree)
             removed.append(f"HKCU\\{tree}")
-        except FileNotFoundError:
+        except OSError:
             continue
     # RegisteredApplications marker sits under a different parent.
     try:

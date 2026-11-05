@@ -197,6 +197,15 @@ function json(res: import('http').ServerResponse, body: unknown, status = 200): 
   res.end(JSON.stringify(body));
 }
 
+function checkOrigin(req: import('http').IncomingMessage, res: import('http').ServerResponse): boolean {
+  if (req.headers.origin && req.headers.origin !== `http://${req.headers.host}`) {
+    json(res, { error: 'Origin rejected' }, 403);
+    return false;
+  }
+  return true;
+}
+
+
 function readBody(req: import('http').IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
     let body = '';
@@ -400,6 +409,7 @@ export function installDesktopBridge(server: BridgeServer, production = false) {
 
   // 3. Recursive folder scan.
   server.middlewares.use('/api/scan-folder', async (req, res) => {
+    if (!checkOrigin(req, res)) return;
     try {
       const { folderPath, recursive = true } = JSON.parse((await readBody(req)) || '{}');
       if (!folderPath || !fs.existsSync(folderPath)) {
@@ -433,6 +443,7 @@ export function installDesktopBridge(server: BridgeServer, production = false) {
 
   // 4. Reveal in Windows Explorer with foreground activation and path resolution.
   server.middlewares.use('/api/open-folder', async (req, res) => {
+    if (!checkOrigin(req, res)) return;
     try {
       const { targetPath } = JSON.parse((await readBody(req)) || '{}');
       openInExplorerNative(targetPath, (err) => {
@@ -449,6 +460,7 @@ export function installDesktopBridge(server: BridgeServer, production = false) {
 
   // 5. Raw markdown text for the source view.
   server.middlewares.use('/api/read-file', async (req, res) => {
+    if (!checkOrigin(req, res)) return;
     try {
       const { filePath } = JSON.parse((await readBody(req)) || '{}');
       if (filePath && fs.existsSync(filePath)) {
@@ -577,6 +589,7 @@ export function installDesktopBridge(server: BridgeServer, production = false) {
   });
   server.middlewares.use('/api/preview-draft', async (req, res) => {
     if (req.method !== 'POST') return json(res, { error: 'POST required' }, 405);
+    if (!checkOrigin(req, res)) return;
     try {
       const { path: file, text } = JSON.parse(await readBody(req));
       if (typeof text !== 'string') return json(res, { error: 'Text required' }, 400);
@@ -669,6 +682,7 @@ export function installDesktopBridge(server: BridgeServer, production = false) {
 
   server.middlewares.use('/api/cancel-job', async (req, res) => {
     if (req.method !== 'POST') return json(res, { stopped: false }, 405);
+    if (!checkOrigin(req, res)) return;
     try {
       const { id } = JSON.parse(await readBody(req));
       const job = jobs.get(id);
@@ -679,6 +693,7 @@ export function installDesktopBridge(server: BridgeServer, production = false) {
 
   // 6. Conversion execution with SSE streaming.
   server.middlewares.use('/api/convert-job', async (req, res) => {
+    if (!checkOrigin(req, res)) return;
     try {
       const { args, id: requestedId, windowSession } = JSON.parse((await readBody(req)) || '{}');
       if (!Array.isArray(args)) return void ((res.statusCode = 400), res.end('Missing args'));

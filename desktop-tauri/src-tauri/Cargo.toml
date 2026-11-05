@@ -1,6 +1,6 @@
 [package]
 name = "fa-md-pdf-desktop"
-version = "0.3.0-beta.3"
+version = "0.3.0"
 description = "Persian Markdown reader, editor and PDF/Word converter"
 authors = ["MdPersia contributors"]
 edition = "2021"
