@@ -257,32 +257,25 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def validate_file_option(path: Path | None, label: str) -> Path | None:
+def _validate_path_kind(path: Path | None, label: str, kind: str) -> Path | None:
     from .converter import ConversionError
 
     if path is None:
         return None
-
     resolved = path.resolve()
     if not resolved.exists():
         raise ConversionError(f"{label} does not exist: {resolved}")
-    if not resolved.is_file():
-        raise ConversionError(f"{label} must be a file: {resolved}")
+    if not (resolved.is_file() if kind == "file" else resolved.is_dir()):
+        raise ConversionError(f"{label} must be a {kind}: {resolved}")
     return resolved
+
+
+def validate_file_option(path: Path | None, label: str) -> Path | None:
+    return _validate_path_kind(path, label, "file")
 
 
 def validate_dir_option(path: Path | None, label: str) -> Path | None:
-    from .converter import ConversionError
-
-    if path is None:
-        return None
-
-    resolved = path.resolve()
-    if not resolved.exists():
-        raise ConversionError(f"{label} does not exist: {resolved}")
-    if not resolved.is_dir():
-        raise ConversionError(f"{label} must be a directory: {resolved}")
-    return resolved
+    return _validate_path_kind(path, label, "directory")
 
 
 def resolve_mermaid_source(args: argparse.Namespace, project_root: Path) -> str:

@@ -76,7 +76,6 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 fa_md_pdf = ["assets/*.css", "assets/*.ico", "assets/*.svg", "assets/*.png"]
-mdpersia = ["assets/*.css"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

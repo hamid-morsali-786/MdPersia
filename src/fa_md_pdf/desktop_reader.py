@@ -5,25 +5,16 @@ or starts a conversion browser.
 """
 from __future__ import annotations
 
-import argparse
 import json
 import os
 import sys
 
-from .desktop_engine import asset_root
+from .desktop_engine import asset_root, build_desktop_cli_parser, reconfigure_streams
 
 
 def main(argv: list[str] | None = None) -> int:
-    for stream in (sys.stdin, sys.stdout, sys.stderr):
-        if stream is not None:
-            stream.reconfigure(encoding='utf-8', line_buffering=True)
-    parser = argparse.ArgumentParser(prog='mdpersia-reader')
-    parser.add_argument('--assets-dir')
-    mode = parser.add_mutually_exclusive_group(required=True)
-    mode.add_argument('--worker', action='store_true')
-    mode.add_argument('--doctor', action='store_true')
-    mode.add_argument('--convert', nargs=argparse.REMAINDER)
-    args = parser.parse_args(argv)
+    reconfigure_streams()
+    args = build_desktop_cli_parser('mdpersia-reader').parse_args(argv)
     try:
         root = asset_root(args.assets_dir)
         os.chdir(root)

@@ -61,19 +61,25 @@ def doctor(root: Path) -> dict:
     }
 
 
-def main(argv: list[str] | None = None) -> int:
-    # Frozen CPython does not inherit all interpreter environment settings.
-    # Explicitly decode Rust's UTF-8 input, including Persian paths and draft text.
+def reconfigure_streams() -> None:
     for stream in (sys.stdin, sys.stdout, sys.stderr):
         if stream is not None:
             stream.reconfigure(encoding='utf-8', line_buffering=True)
-    parser = argparse.ArgumentParser(prog='mdpersia-engine')
+
+
+def build_desktop_cli_parser(prog: str) -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog=prog)
     parser.add_argument('--assets-dir')
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument('--worker', action='store_true')
     mode.add_argument('--doctor', action='store_true')
     mode.add_argument('--convert', nargs=argparse.REMAINDER)
-    args = parser.parse_args(argv)
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    reconfigure_streams()
+    args = build_desktop_cli_parser('mdpersia-engine').parse_args(argv)
     try:
         root = asset_root(args.assets_dir)
         configure_runtime(root)

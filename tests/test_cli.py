@@ -152,6 +152,19 @@ def test_validate_dir_option(tmp_path: Path):
         validate_dir_option(file_path, "Directory")
 
 
+def test_validate_path_kind(tmp_path: Path):
+    from fa_md_pdf.cli import _validate_path_kind
+    test_file = tmp_path / "f.txt"
+    test_file.write_text("content", encoding="utf-8")
+    assert _validate_path_kind(None, "Path", "file") is None
+    assert _validate_path_kind(test_file, "Path", "file") == test_file.resolve()
+    assert _validate_path_kind(tmp_path, "Path", "dir") == tmp_path.resolve()
+    with pytest.raises(ConversionError, match="must be a file"):
+        _validate_path_kind(tmp_path, "Path", "file")
+    with pytest.raises(ConversionError, match="must be a dir"):
+        _validate_path_kind(test_file, "Path", "dir")
+
+
 def test_resolve_mermaid_source_url():
     args = argparse.Namespace(mermaid_url="https://cdn.test/mermaid.js", mermaid_js=None)
     assert resolve_mermaid_source(args, Path.cwd()) == "https://cdn.test/mermaid.js"

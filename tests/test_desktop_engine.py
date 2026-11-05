@@ -55,3 +55,12 @@ def test_worker_reuses_renderer_and_returns_independent_documents(tmp_path):
     assert results[0]['id'] == 1 and 'نخست' in results[0]['html']
     assert results[1]['id'] == 2 and 'دوم' in results[1]['html']
     assert 'نخست' not in results[1]['html']
+
+
+def test_desktop_cli_parser():
+    from fa_md_pdf.desktop_engine import build_desktop_cli_parser
+    parser = build_desktop_cli_parser("mdpersia-test")
+    assert parser.prog == "mdpersia-test"
+    args = parser.parse_args(["--doctor"])
+    assert args.doctor is True
+    assert args.worker is False
