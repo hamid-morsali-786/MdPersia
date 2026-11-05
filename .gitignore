@@ -26,3 +26,19 @@ desktop-tauri/dist/
 
 # Generated visual QA references stay local.
 tests/visual/
+
+# Distribution & release build artifacts
+dist-pypi/
+release-assets/
+*.whl
+*.tar.gz
+
+# IDE & Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Coverage & testing
+.coverage
+htmlcov/
