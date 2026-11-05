@@ -1,6 +1,7 @@
 """Exercise the actual console, exports, and watch phases in the production desktop UI."""
 
 from __future__ import annotations
+import shutil
 
 import json
 import os
@@ -28,7 +29,7 @@ def main():
     missing.write_text("# Source removed after opening", encoding="utf-8")
     base = "http://127.0.0.1:1425"
     server = subprocess.Popen(
-        ["node", "dist/desktop-server.mjs", "--port", "1425"],
+        [(shutil.which("node") or str((root / ".venv/Lib/site-packages/playwright/driver/node.exe").resolve())), "dist/desktop-server.mjs", "--port", "1425"],
         cwd=root / "desktop-tauri",
         env={**os.environ, "PYTHON_EXECUTABLE": sys.executable},
         stdout=subprocess.DEVNULL,
@@ -43,7 +44,10 @@ def main():
             except OSError:
                 time.sleep(0.1)
         with sync_playwright() as p:
-            browser = p.chromium.launch(channel="msedge", headless=True)
+            try:
+                browser = p.chromium.launch(headless=True)
+            except Exception:
+                browser = p.chromium.launch(channel="msedge", headless=True)
             context = browser.new_context(
                 viewport={"width": 1600, "height": 1000},
                 permissions=["clipboard-read", "clipboard-write"],

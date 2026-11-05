@@ -39,7 +39,7 @@ def main() -> None:
     if args.start:
         server_started = time.perf_counter()
         server = subprocess.Popen([
-            shutil.which("node"), "dist/desktop-server.mjs",
+            (shutil.which("node") or str((root / ".venv/Lib/site-packages/playwright/driver/node.exe").resolve())), "dist/desktop-server.mjs",
             "--port", str(urlparse(args.url).port), "--host", "127.0.0.1", "--strictPort",
         ], cwd=root / "desktop-tauri", env={**os.environ, "PYTHON_EXECUTABLE": sys.executable, "MDPERSIA_INITIAL_FILE": str(root / "examples" / "sample-fa.md")},
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -73,7 +73,10 @@ def main() -> None:
     if server_start_ms is not None:
         report["serverStartupMs"] = server_start_ms
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(channel="msedge", headless=True)
+        try:
+            browser = playwright.chromium.launch(headless=True)
+        except Exception:
+            browser = playwright.chromium.launch(channel="msedge", headless=True)
         page = browser.new_page(viewport={"width": 1440, "height": 900})
         errors = []
         previews = []
@@ -173,7 +176,12 @@ def main() -> None:
         rows.filter(has_text=document.name).click()
         frame.get_by_role('heading', name='سند روزمره', exact=True).wait_for()
         inner_b = page.locator('iframe').element_handle().content_frame()
-        inner_b.wait_for_function('window.scrollY >= 280')
+        for _ in range(50):
+            if inner_b.evaluate('() => window.scrollY >= 280'):
+                break
+            time.sleep(.05)
+        else:
+            raise AssertionError('Scroll position was not restored')
         report['documentReadingPositionRestored'] = True
 
         twins = []

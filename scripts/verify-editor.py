@@ -1,5 +1,6 @@
 """Verify editing and actual disk writes through the same production desktop UI."""
 from __future__ import annotations
+import shutil
 
 import json
 import os
@@ -25,7 +26,7 @@ def main():
     other.write_text("# سند دوم\n\nمتن سند دوم.", encoding="utf-8")
     copy.unlink(missing_ok=True)
     base = "http://127.0.0.1:1423"
-    server = subprocess.Popen(["node", "dist/desktop-server.mjs", "--port", "1423"], cwd=root / "desktop-tauri", env={**os.environ, "PYTHON_EXECUTABLE": sys.executable}, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    server = subprocess.Popen([(shutil.which("node") or str((root / ".venv/Lib/site-packages/playwright/driver/node.exe").resolve())), "dist/desktop-server.mjs", "--port", "1423"], cwd=root / "desktop-tauri", env={**os.environ, "PYTHON_EXECUTABLE": sys.executable}, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     report = {}
     try:
         for _ in range(100):
@@ -35,7 +36,10 @@ def main():
             except OSError:
                 time.sleep(.1)
         with sync_playwright() as p:
-            browser = p.chromium.launch(channel="msedge", headless=True)
+            try:
+                browser = p.chromium.launch(headless=True)
+            except Exception:
+                browser = p.chromium.launch(channel="msedge", headless=True)
             page = browser.new_page(viewport={"width": 1440, "height": 1000})
             errors, requests = [], []
             page.on("pageerror", lambda error: errors.append(str(error)))

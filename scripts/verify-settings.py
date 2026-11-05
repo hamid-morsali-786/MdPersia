@@ -1,5 +1,6 @@
 """Exercise real settings behavior in the existing desktop build with a fresh Edge profile."""
 from __future__ import annotations
+import shutil
 
 import json
 import os
@@ -23,7 +24,7 @@ def main() -> None:
     other = output / "another.md"
     other.write_text("# سند دوم\n\nیک سند مستقل برای بررسی صف.", encoding="utf-8")
     base = "http://127.0.0.1:1422"
-    server = subprocess.Popen(["node", "dist/desktop-server.mjs", "--port", "1422"], cwd=root / "desktop-tauri",
+    server = subprocess.Popen([(shutil.which("node") or str((root / ".venv/Lib/site-packages/playwright/driver/node.exe").resolve())), "dist/desktop-server.mjs", "--port", "1422"], cwd=root / "desktop-tauri",
                               env={**os.environ, "PYTHON_EXECUTABLE": sys.executable}, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     report = {}
     try:
@@ -34,7 +35,10 @@ def main() -> None:
             except OSError:
                 time.sleep(.1)
         with sync_playwright() as playwright:
-            browser = playwright.chromium.launch(channel="msedge", headless=True)
+            try:
+                browser = playwright.chromium.launch(headless=True)
+            except Exception:
+                browser = playwright.chromium.launch(channel="msedge", headless=True)
             context = browser.new_context(viewport={"width": 1440, "height": 900})
             page = context.new_page()
             errors, requests = [], []

@@ -1,6 +1,7 @@
 """Real pointer hit testing and tooltip placement in the shipped desktop UI."""
 
 from __future__ import annotations
+import shutil
 
 import argparse
 import json
@@ -71,7 +72,7 @@ def main():
         document.write_text(text, encoding="utf-8")
     base = "http://127.0.0.1:1424"
     server = subprocess.Popen(
-        ["node", "dist/desktop-server.mjs", "--port", "1424"],
+        [(shutil.which("node") or str((root / ".venv/Lib/site-packages/playwright/driver/node.exe").resolve())), "dist/desktop-server.mjs", "--port", "1424"],
         cwd=root / "desktop-tauri",
         env={**os.environ, "PYTHON_EXECUTABLE": sys.executable},
         stdout=subprocess.DEVNULL,
@@ -86,7 +87,10 @@ def main():
             except OSError:
                 time.sleep(0.1)
         with sync_playwright() as playwright:
-            browser = playwright.chromium.launch(channel="msedge", headless=True)
+            try:
+                browser = playwright.chromium.launch(headless=True)
+            except Exception:
+                browser = playwright.chromium.launch(channel="msedge", headless=True)
             page = browser.new_page(viewport={"width": 1600, "height": 1000})
             page_errors = []
             page.on("pageerror", lambda error: page_errors.append(str(error)))

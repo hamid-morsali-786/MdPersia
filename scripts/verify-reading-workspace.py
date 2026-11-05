@@ -3,6 +3,7 @@
 Run against the production bridge, not mocked document responses.
 """
 from __future__ import annotations
+import shutil
 
 import argparse
 import json
@@ -35,7 +36,7 @@ def main():
     root = Path(__file__).resolve().parents[1]
     output = root / 'output/reading-ui'
     if args.start:
-        server = subprocess.Popen(['node', 'dist/desktop-server.mjs', '--port', '1423'],
+        server = subprocess.Popen([(shutil.which('node') or str((root / '.venv/Lib/site-packages/playwright/driver/node.exe').resolve())), 'dist/desktop-server.mjs', '--port', '1423'],
             cwd=root / 'desktop-tauri', env={**os.environ, 'PYTHON_EXECUTABLE': sys.executable},
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         atexit.register(lambda: server.terminate() if server.poll() is None else None)
@@ -56,7 +57,10 @@ def main():
             + '\n\nمتن بلند برای آزمون پیمایش.' * 70, encoding='utf-8')
     report = {}
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(channel='msedge', headless=True)
+        try:
+            browser = playwright.chromium.launch(headless=True)
+        except Exception:
+            browser = playwright.chromium.launch(channel='msedge', headless=True)
         page = browser.new_page(viewport={'width': 1440, 'height': 900})
         errors = []
         page.on('pageerror', lambda error: errors.append(str(error)))
