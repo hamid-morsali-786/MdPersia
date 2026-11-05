@@ -3,27 +3,57 @@ from .rtl_wrapper import has_persian, classify_block_direction
 from .word_math import append_equation
 from .word_numbering import new_list, apply_list
 from .conversion_report import warn
+# Compatibility exports preserve the previous import paths.
+from .word_styles import (
+    _clean_xml_text as _clean_xml_text,
+    _set_paragraph_rtl as _set_paragraph_rtl,
+    _set_paragraph_ltr as _set_paragraph_ltr,
+    _set_run_rtl as _set_run_rtl,
+    _set_run_ltr as _set_run_ltr,
+    _set_run_size_cs as _set_run_size_cs,
+    _set_run_bold_cs as _set_run_bold_cs,
+    _set_run_italic_cs as _set_run_italic_cs,
+    _set_run_font as _set_run_font,
+    _set_document_default_rtl as _set_document_default_rtl,
+    RunStyle as RunStyle,
+    _split_emojis as _split_emojis,
+    _apply_run_formatting as _apply_run_formatting,
+    _add_single_run as _add_single_run,
+    _add_emoji_split_runs as _add_emoji_split_runs,
+    _add_styled_run as _add_styled_run,
+    _create_hyperlink_piece as _create_hyperlink_piece,
+    DEFAULT_DOCX_FONT as DEFAULT_DOCX_FONT,
+    DEFAULT_DOCX_FONT_FALLBACK as DEFAULT_DOCX_FONT_FALLBACK,
+    DEFAULT_DOCX_CODE_FONT as DEFAULT_DOCX_CODE_FONT,
+    DEFAULT_DOCX_EMOJI_FONT as DEFAULT_DOCX_EMOJI_FONT,
+    XML_ILLEGAL_CHARS_RE as XML_ILLEGAL_CHARS_RE,
+)
+from .word_document import (
+    create_document,
+    page_geometry,
+    PAGE_FORMAT_DIMENSIONS as PAGE_FORMAT_DIMENSIONS,
+    UNIT_CONVERTERS as UNIT_CONVERTERS,
+    parse_docx_length as parse_docx_length,
+)
+from .local_images import resolve_image_file as _resolve_image_file
 
 import re
 import hashlib
-from urllib.parse import unquote, urlsplit
-from urllib.request import url2pathname
+from urllib.parse import unquote
 from dataclasses import dataclass, replace
 from html.parser import HTMLParser
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from docx import Document
-from docx.enum.section import WD_ORIENT
 from docx.enum.table import WD_ALIGN_VERTICAL
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import qn
-from docx.shared import Cm, Inches, Mm, Pt, RGBColor
+from docx.shared import Inches, Pt, RGBColor
 from markdown_it import MarkdownIt
 from markdown_it.token import Token
 
 from .html_builder import (
-    EMOJI_PATTERN,
     build_markdown_renderer,
     strip_emojis,
     strip_front_matter,
@@ -31,58 +61,10 @@ from .html_builder import (
 
 if TYPE_CHECKING:
     from docx.document import Document as DocxDocument
-    from docx.shared import Length
     from docx.text.paragraph import Paragraph
 
 
-DEFAULT_DOCX_FONT = "Vazirmatn"
-DEFAULT_DOCX_FONT_FALLBACK = "Tahoma"
-DEFAULT_DOCX_CODE_FONT = "Consolas"
-DEFAULT_DOCX_EMOJI_FONT = "Segoe UI Emoji"
-
-XML_ILLEGAL_CHARS_RE = re.compile(
-    r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f\ud800-\udfff\ufffe\uffff]"
-)
-
-
-def _clean_xml_text(text: str) -> str:
-    """Remove control characters, surrogates, and noncharacters invalid in XML 1.0."""
-    return XML_ILLEGAL_CHARS_RE.sub("", text) if text else ""
-
 HEADING_SIZES = {1: 22, 2: 18, 3: 15, 4: 13, 5: 12, 6: 11}
-
-PAGE_FORMAT_DIMENSIONS: dict[str, tuple[float, float]] = {
-    "A3": (297.0, 420.0),
-    "A4": (210.0, 297.0),
-    "A5": (148.0, 210.0),
-    "LETTER": (215.9, 279.4),
-    "LEGAL": (215.9, 355.6),
-}
-
-
-UNIT_CONVERTERS: dict[str, Any] = {
-    "mm": Mm,
-    "cm": Cm,
-    "in": Inches,
-    "inch": Inches,
-    "pt": Pt,
-    "px": lambda v: Inches(v / 96.0),
-}
-
-
-def parse_docx_length(margin_str: str) -> Length:
-    """Parse length string (e.g. '5mm', '15mm', '0.5in', '1.5cm', '20px') into docx Length."""
-    m = re.match(r"^([\d.]+)\s*(mm|cm|in|inch|pt|px)?$", (margin_str or "").strip().lower())
-    if not m:
-        return Mm(15.0)
-    try:
-        val = float(m.group(1))
-    except ValueError:
-        return Mm(15.0)
-    converter = UNIT_CONVERTERS.get(m.group(2) or "mm", Mm)
-    return converter(val)
-
-
 
 @dataclass(frozen=True)
 class DocxBuildOptions:
@@ -107,266 +89,6 @@ class DocxBuildResult:
     title: str
     has_mermaid: bool
     mermaid_blocks: list[str]  # raw mermaid code blocks (for image rendering)
-
-
-def _set_paragraph_rtl(paragraph: "Paragraph") -> None:
-    """Apply right-to-left direction to a paragraph."""
-    pPr = paragraph._p.get_or_add_pPr()
-    bidi = pPr.find(qn("w:bidi"))
-    if bidi is not None:
-        pPr.remove(bidi)
-    bidi = pPr.makeelement(qn("w:bidi"), {})
-    pPr.append(bidi)
-
-
-def _set_paragraph_ltr(paragraph: "Paragraph") -> None:
-    """Explicitly apply left-to-right direction to a paragraph."""
-    pPr = paragraph._p.get_or_add_pPr()
-    bidi = pPr.find(qn("w:bidi"))
-    if bidi is not None:
-        pPr.remove(bidi)
-    bidi = pPr.makeelement(qn("w:bidi"), {qn("w:val"): "0"})
-    pPr.append(bidi)
-
-
-def _set_run_rtl(run) -> None:
-    """Apply right-to-left text formatting to a run."""
-    rPr = run._r.get_or_add_rPr()
-    rtl = rPr.find(qn("w:rtl"))
-    if rtl is not None:
-        rPr.remove(rtl)
-    rtl = rPr.makeelement(qn("w:rtl"), {})
-    rPr.append(rtl)
-
-
-def _set_run_ltr(run) -> None:
-    """Explicitly apply left-to-right text formatting to a run."""
-    rPr = run._r.get_or_add_rPr()
-    rtl = rPr.find(qn("w:rtl"))
-    if rtl is not None:
-        rPr.remove(rtl)
-    rtl = rPr.makeelement(qn("w:rtl"), {qn("w:val"): "0"})
-    rPr.append(rtl)
-
-
-def _set_run_size_cs(run, font_size_pt: int) -> None:
-    """Set complex-script font size (szCs) used for Arabic/Persian text in Word."""
-    rPr = run._r.get_or_add_rPr()
-    # Word stores size in half-points
-    half_pts = str(int(font_size_pt * 2))
-    szCs = rPr.find(qn("w:szCs"))
-    if szCs is None:
-        szCs = rPr.makeelement(qn("w:szCs"), {})
-        rPr.append(szCs)
-    szCs.set(qn("w:val"), half_pts)
-
-
-def _set_run_bold_cs(run) -> None:
-    """Set complex-script bold (bCs) used for Arabic/Persian text in Word."""
-    rPr = run._r.get_or_add_rPr()
-    bCs = rPr.find(qn("w:bCs"))
-    if bCs is None:
-        bCs = rPr.makeelement(qn("w:bCs"), {})
-        rPr.append(bCs)
-
-
-def _set_run_italic_cs(run) -> None:
-    """Set complex-script italic (iCs) used for Arabic/Persian text in Word."""
-    rPr = run._r.get_or_add_rPr()
-    iCs = rPr.find(qn("w:iCs"))
-    if iCs is None:
-        iCs = rPr.makeelement(qn("w:iCs"), {})
-        rPr.append(iCs)
-
-
-def _set_run_font(run, font_name: str, complex_script_font: str | None = None) -> None:
-    """Set the font for both ASCII and complex script (Arabic/Persian)."""
-    run.font.name = font_name
-    rPr = run._r.get_or_add_rPr()
-    rFonts = rPr.find(qn("w:rFonts"))
-    if rFonts is None:
-        rFonts = rPr.makeelement(qn("w:rFonts"), {})
-        rPr.append(rFonts)
-    rFonts.set(qn("w:ascii"), font_name)
-    rFonts.set(qn("w:hAnsi"), font_name)
-    rFonts.set(qn("w:cs"), complex_script_font or font_name)
-
-
-def _set_document_default_rtl(document: "DocxDocument", font_name: str, font_size_pt: int) -> None:
-    """Configure document-wide defaults for RTL Persian."""
-    style = document.styles["Normal"]
-    style.font.name = font_name
-    style.font.size = Pt(font_size_pt)
-
-    # Set RTL on the Normal style paragraph properties
-    style_element = style.element
-    pPr = style_element.find(qn("w:pPr"))
-    if pPr is None:
-        pPr = style_element.makeelement(qn("w:pPr"), {})
-        style_element.append(pPr)
-    bidi = pPr.find(qn("w:bidi"))
-    if bidi is None:
-        bidi = pPr.makeelement(qn("w:bidi"), {})
-        pPr.append(bidi)
-    # Remove any jc - let bidi handle alignment naturally
-    jc = pPr.find(qn("w:jc"))
-    if jc is not None:
-        pPr.remove(jc)
-
-    # Set RTL on the Normal style run properties
-    rPr = style_element.find(qn("w:rPr"))
-    if rPr is None:
-        rPr = style_element.makeelement(qn("w:rPr"), {})
-        style_element.append(rPr)
-    rtl = rPr.find(qn("w:rtl"))
-    if rtl is None:
-        rtl = rPr.makeelement(qn("w:rtl"), {})
-        rPr.append(rtl)
-    rFonts = rPr.find(qn("w:rFonts"))
-    if rFonts is None:
-        rFonts = rPr.makeelement(qn("w:rFonts"), {})
-        rPr.append(rFonts)
-    rFonts.set(qn("w:cs"), font_name)
-    rFonts.set(qn("w:ascii"), font_name)
-    rFonts.set(qn("w:hAnsi"), font_name)
-
-    # Also set heading styles to RTL
-    for heading_num in range(1, 7):
-        style_name = f"Heading {heading_num}"
-        try:
-            h_style = document.styles[style_name]
-            h_element = h_style.element
-            h_pPr = h_element.find(qn("w:pPr"))
-            if h_pPr is None:
-                h_pPr = h_element.makeelement(qn("w:pPr"), {})
-                h_element.append(h_pPr)
-            h_bidi = h_pPr.find(qn("w:bidi"))
-            if h_bidi is None:
-                h_bidi = h_pPr.makeelement(qn("w:bidi"), {})
-                h_pPr.append(h_bidi)
-            # Remove jc from headings too
-            h_jc = h_pPr.find(qn("w:jc"))
-            if h_jc is not None:
-                h_pPr.remove(h_jc)
-        except KeyError:
-            pass
-
-
-@dataclass(frozen=True)
-class RunStyle:
-    font_name: str = DEFAULT_DOCX_FONT
-    font_size_pt: int | None = None
-    bold: bool = False
-    italic: bool = False
-    color: RGBColor | None = None
-    code: bool = False
-    rtl: bool = True
-
-
-def _split_emojis(text: str) -> list[tuple[str, bool]]:
-    """Split text into (substring, is_emoji) pairs."""
-    result: list[tuple[str, bool]] = []
-    last_end = 0
-    for match in EMOJI_PATTERN.finditer(text):
-        start, end = match.span()
-        if start > last_end:
-            result.append((text[last_end:start], False))
-        result.append((match.group(0), True))
-        last_end = end
-    if last_end < len(text):
-        result.append((text[last_end:], False))
-    return result or [(text, False)]
-
-
-def _apply_run_formatting(run, style: RunStyle) -> None:
-    """Apply size, weight, slant, color, and bidi formatting to a run."""
-    if style.font_size_pt is not None:
-        run.font.size = Pt(style.font_size_pt)
-        _set_run_size_cs(run, style.font_size_pt)
-    if style.bold:
-        run.bold = True
-        _set_run_bold_cs(run)
-    if style.italic:
-        run.italic = True
-        _set_run_italic_cs(run)
-    if style.color is not None:
-        run.font.color.rgb = style.color
-    if style.rtl and not style.code:
-        _set_run_rtl(run)
-    else:
-        _set_run_ltr(run)
-
-
-def _add_single_run(paragraph: "Paragraph", text: str, style: RunStyle):
-    """Add a single formatted run to a paragraph."""
-    run = paragraph.add_run(_clean_xml_text(text))
-    f_name = style.font_name
-    cs_font = None if style.code else f_name
-    _set_run_font(run, f_name, complex_script_font=cs_font)
-    _apply_run_formatting(run, style)
-    return run
-
-
-def _add_emoji_split_runs(
-    paragraph: "Paragraph",
-    text: str,
-    base_style: RunStyle,
-    base_font: str,
-):
-    """Split text by emojis and add individual runs with matching fonts."""
-    last_run = None
-    for piece, is_emoji in _split_emojis(text):
-        style = replace(
-            base_style,
-            font_name=DEFAULT_DOCX_EMOJI_FONT if is_emoji else base_font,
-            rtl=False if is_emoji else base_style.rtl,
-        )
-        last_run = _add_single_run(paragraph, piece, style)
-    return last_run
-
-
-def _add_styled_run(
-    paragraph: "Paragraph",
-    text: str,
-    *,
-    font_name: str = DEFAULT_DOCX_FONT,
-    font_size_pt: int | None = None,
-    bold: bool = False,
-    italic: bool = False,
-    code: bool = False,
-    rtl: bool = True,
-    color: RGBColor | None = None,
-):
-    """Add a run to the paragraph with styling and emoji font fallback."""
-    if not text:
-        return None
-    style = RunStyle(
-        font_name=DEFAULT_DOCX_CODE_FONT if code else font_name,
-        font_size_pt=font_size_pt,
-        bold=bold,
-        italic=italic,
-        color=color,
-        code=code,
-        rtl=rtl,
-    )
-    if not code and EMOJI_PATTERN.search(text):
-        return _add_emoji_split_runs(paragraph, text, style, font_name)
-    return _add_single_run(paragraph, text, style)
-
-
-def _create_hyperlink_piece(hyperlink, paragraph: "Paragraph", text: str, style: RunStyle) -> None:
-    """Create a styled run inside a Word hyperlink element."""
-    from docx.oxml import parse_xml
-    from docx.text.run import Run
-
-    run_xml = parse_xml(r'<w:r xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"/>')
-    hyperlink.append(run_xml)
-    run = Run(run_xml, paragraph)
-    run.text = _clean_xml_text(text)
-    cs_font = style.font_name if not style.rtl else None
-    _set_run_font(run, style.font_name, complex_script_font=cs_font)
-    _apply_run_formatting(run, style)
-    run.underline = True
 
 
 def _add_hyperlink_run(
@@ -431,33 +153,11 @@ def _calculate_image_width(img_px_width: int, options: DocxBuildOptions) -> floa
     """Calculate target width in inches constrained by page format and margins."""
     css_width = img_px_width / 96.0
     fmt_key = (options.page_format or "A4").strip().upper()
-    w_mm, h_mm = PAGE_FORMAT_DIMENSIONS.get(fmt_key, (210.0, 297.0))
-    page_w_in = (h_mm if options.landscape else w_mm) / 25.4
-    margin_in = parse_docx_length(options.margin).inches
-    available_w = max(1.0, page_w_in - (2 * margin_in))
-    max_w = min(options.image_max_width_inches, available_w) if options.image_max_width_inches != 6.5 else available_w
+    geometry = page_geometry(fmt_key, options.margin, options.landscape)
+    available_w = geometry.available_image_width
+    max_w = geometry.image_width_limit(options.image_max_width_inches)
     target_w = min(css_width, max_w)
     return min(css_width, available_w) if target_w < 1.0 else target_w
-
-
-def _resolve_image_file(src: str, source_path: Path) -> Path | None:
-    """Resolve relative or absolute local image file path."""
-    if not src or src.lower().startswith(("http://", "https://", "data:")):
-        return None
-    if src.lower().startswith("file:"):
-        url = urlsplit(src)
-        src = url2pathname(("//" + url.netloc if url.netloc else "") + url.path)
-    else:
-        src = unquote(src)
-    candidate = (source_path.parent / src).resolve()
-    if candidate.is_file():
-        return candidate
-    alt_cand = Path(src).resolve()
-    if alt_cand.is_file():
-        return alt_cand
-    if candidate.suffix.lower() == ".svg" and candidate.with_suffix(".png").is_file():
-        return candidate.with_suffix(".png")
-    return None
 
 
 def _embed_image_picture(paragraph: "Paragraph", image_path: Path, options: DocxBuildOptions) -> bool:
@@ -467,8 +167,8 @@ def _embed_image_picture(paragraph: "Paragraph", image_path: Path, options: Docx
 
         img = DocxImage.from_file(str(image_path))
         target_w = _calculate_image_width(img.px_width, options)
-        w_mm, h_mm = PAGE_FORMAT_DIMENSIONS.get(options.page_format.upper(), (210.0, 297.0))
-        usable_height = (w_mm if options.landscape else h_mm) / 25.4 - 2 * parse_docx_length(options.margin).inches - .3
+        geometry = page_geometry(options.page_format.upper(), options.margin, options.landscape)
+        usable_height = geometry.available_image_height
         target_w = min(target_w, max(.1, usable_height) * img.px_width / img.px_height)
         run = paragraph.add_run()
         run.add_picture(str(image_path), width=Inches(target_w))
@@ -1126,17 +826,14 @@ def _add_mermaid_image(
         # Compute natural CSS width and clamp between min and max.
         css_width_inches = img_width / (float(options.image_scale) * 96.0)
         fmt_key = (options.page_format or "A4").strip().upper()
-        w_mm, h_mm = PAGE_FORMAT_DIMENSIONS.get(fmt_key, (210.0, 297.0))
-        page_w_in = (h_mm if options.landscape else w_mm) / 25.4
-        margin_in = parse_docx_length(options.margin).inches
-        available_w = max(1.0, page_w_in - (2 * margin_in))
-        max_limit = min(options.image_max_width_inches, available_w) if options.image_max_width_inches != 6.5 else available_w
+        geometry = page_geometry(fmt_key, options.margin, options.landscape)
+        max_limit = geometry.image_width_limit(options.image_max_width_inches)
         target_width = min(
             max(css_width_inches, options.image_min_width_inches),
             max_limit,
         )
 
-        usable_height = (w_mm if options.landscape else h_mm) / 25.4 - 2 * margin_in - .3
+        usable_height = geometry.available_image_height
         target_width = min(target_width, max(.1, usable_height) * img_width / img_height)
         run.add_picture(str(image_path), width=Inches(target_width))
     except Exception as exc:  # noqa: BLE001
@@ -1296,68 +993,7 @@ def build_docx(
     mermaid_blocks = [t.content.strip() for t in tokens
                       if t.type == "fence" and t.info.strip().lower() == "mermaid"]
 
-    document = Document()
-    _set_document_default_rtl(document, options.font_family, options.font_size_pt)
-
-    # Set page dimensions, orientation, margins, and footer page numbers
-    fmt_key = (options.page_format or "A4").strip().upper()
-    w_mm, h_mm = PAGE_FORMAT_DIMENSIONS.get(fmt_key, (210.0, 297.0))
-    margin_len = parse_docx_length(options.margin)
-
-    for section in document.sections:
-        if options.landscape:
-            section.page_width = Mm(h_mm)
-            section.page_height = Mm(w_mm)
-            section.orientation = WD_ORIENT.LANDSCAPE
-        else:
-            section.page_width = Mm(w_mm)
-            section.page_height = Mm(h_mm)
-            section.orientation = WD_ORIENT.PORTRAIT
-
-        section.left_margin = margin_len
-        section.right_margin = margin_len
-        section.top_margin = margin_len
-        section.bottom_margin = margin_len
-        # RTL section - set bidi on section properties
-        if options.rtl:
-            sectPr = section._sectPr
-            bidi = sectPr.find(qn("w:bidi"))
-            if bidi is None:
-                bidi = sectPr.makeelement(qn("w:bidi"), {})
-                sectPr.append(bidi)
-            # Also set document grid for RTL
-            docGrid = sectPr.find(qn("w:docGrid"))
-            if docGrid is None:
-                docGrid = sectPr.makeelement(qn("w:docGrid"), {})
-                sectPr.append(docGrid)
-            docGrid.set(qn("w:charSpace"), "0")
-
-        # Dynamic Persian footer page numbering: "صفحه X از Y"
-        if options.include_page_numbers:
-            footer = section.footer
-            if footer.paragraphs:
-                f_p = footer.paragraphs[0]
-                f_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                if options.rtl:
-                    _set_paragraph_rtl(f_p)
-                r_page = f_p.add_run("صفحه ")
-                _set_run_font(r_page, options.font_family)
-                r_page.font.size = Pt(9)
-                r_page.font.color.rgb = RGBColor(0x6B, 0x72, 0x80)
-
-                from docx.oxml import parse_xml
-
-                f_p.add_run()._r.append(
-                    parse_xml(r'<w:fldSimple xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" w:instr="PAGE"/>')
-                )
-                r_of = f_p.add_run(" از ")
-                _set_run_font(r_of, options.font_family)
-                r_of.font.size = Pt(9)
-                r_of.font.color.rgb = RGBColor(0x6B, 0x72, 0x80)
-
-                f_p.add_run()._r.append(
-                    parse_xml(r'<w:fldSimple xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" w:instr="NUMPAGES"/>')
-                )
+    document = create_document(options)
 
     document.core_properties.title = _clean_xml_text(title)[:255]
     _render_blocks(document, tokens, options)
@@ -1527,7 +1163,6 @@ def _render_blocks(document, tokens: list[Token], options: DocxBuildOptions) -> 
 
         # Skip unknown tokens
         i += 1
-
 
 
 def _add_footnotes(document, tokens, options):

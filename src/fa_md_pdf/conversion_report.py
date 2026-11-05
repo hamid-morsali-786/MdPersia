@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import json
 import sys
+from inspect import signature
+from itertools import islice
 from contextvars import ContextVar
 from dataclasses import asdict, dataclass
 from functools import wraps
@@ -29,7 +31,8 @@ def warn(code, message, line=None, suggestion=None):
 def preflight(job, options):
     from .html_builder import build_markdown_renderer, read_text_safely, strip_front_matter
     from .math_renderer import render_math
-    from .docx_builder import _resolve_image_file, parse_docx_length, PAGE_FORMAT_DIMENSIONS
+    from .local_images import resolve_image_file
+    from .word_document import parse_docx_length, PAGE_FORMAT_DIMENSIONS
     from html.parser import HTMLParser
 
     class Images(HTMLParser):
@@ -43,7 +46,7 @@ def preflight(job, options):
         if src.startswith(('http:', 'https:')):
             warn('image.remote', 'تصویر اینترنتی برای خروجی آفلاین قابل اتکا نیست.', line,
                  'تصویر را کنار سند ذخیره و از مسیر محلی استفاده کنید.')
-        elif _resolve_image_file(src, job.source) is None:
+        elif resolve_image_file(src, job.source) is None:
             warn('image.missing', f'تصویر محلی پیدا نشد: {src}', line, 'مسیر تصویر را اصلاح کنید.')
         elif options.output_format == 'docx' and src.lower().endswith('.svg'):
             warn('image.svg', 'درج مستقیم SVG در Word پشتیبانی نمی‌شود.', line,
@@ -71,7 +74,7 @@ def preflight(job, options):
     for index, token in enumerate(tokens):
         if token.type == 'tr_open':
             cells = 0
-            for cell in tokens[index + 1:]:
+            for cell in islice(tokens, index + 1, None):
                 if cell.type == 'tr_close':
                     break
                 cells += cell.type in {'td_open', 'th_open'}
@@ -82,11 +85,14 @@ def preflight(job, options):
 
 
 def report_conversion(function):
+    parameters = signature(function)
+
     @wraps(function)
     def wrapper(*args, **kwargs):
-        job_index = 1 if function.__name__ == '_render_job' else 0
-        job = kwargs['job'] if 'job' in kwargs else args[job_index]
-        options = kwargs['options'] if 'options' in kwargs else args[job_index + 1]
+        arguments = parameters.bind(*args, **kwargs)
+        arguments.apply_defaults()
+        job = arguments.arguments['job']
+        options = arguments.arguments['options']
         issues = []
         token = _current.set(issues)
         error = None
