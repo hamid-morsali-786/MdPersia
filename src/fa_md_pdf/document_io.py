@@ -44,9 +44,10 @@ def decode_markdown(raw: bytes) -> tuple[str, str]:
     for encoding, marker in BOM_ENCODINGS.items():
         if raw.startswith(marker):
             return raw[len(marker):].decode(encoding), encoding
-    encoding = "utf-8-sig" if raw.startswith(b"\xef\xbb\xbf") else "utf-8"
+    if raw.startswith(b"\xef\xbb\xbf"):
+        return raw.decode("utf-8-sig"), "utf-8-sig"
     try:
-        return raw.decode(encoding), encoding
+        return raw.decode("utf-8"), "utf-8"
     except UnicodeDecodeError:
         return raw.decode("cp1256"), "cp1256"
 
