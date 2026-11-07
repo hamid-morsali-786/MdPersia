@@ -1,5 +1,5 @@
 from __future__ import annotations
-from .rtl_wrapper import has_persian, classify_block_direction
+from .rtl_wrapper import has_persian, classify_block_direction, inline_prose
 from .word_math import append_equation
 from .word_numbering import new_list, apply_list
 from .conversion_report import warn
@@ -368,7 +368,11 @@ def _render_inline_tokens(
                 _handle_html_inline_image(paragraph, token.content, options)
             continue
 
-        if kind in {"math_inline", "math_block"}:
+        if kind == "field_separator":
+            # A strong RTL boundary keeps two Latin runs in separate fields.
+            _add_styled_run(paragraph, "\u200f " if options.rtl else " ",
+                            font_name=options.font_family, rtl=options.rtl)
+        elif kind in {"math_inline", "math_block"}:
             append_equation(paragraph, _clean_xml_text(token.content), display=kind == "math_block")
         elif kind == "footnote_ref":
             from docx.oxml import OxmlElement
@@ -503,7 +507,7 @@ def _add_heading(
     options: DocxBuildOptions,
 ) -> None:
     paragraph = document.add_paragraph(style=f"Heading {level}")
-    has_fa = options.rtl and classify_block_direction(inline_token.content) == "rtl"
+    has_fa = options.rtl and classify_block_direction(inline_prose(inline_token.children or [])) == "rtl"
     if has_fa:
         _set_paragraph_rtl(paragraph)
     else:
@@ -542,7 +546,7 @@ def _add_paragraph_block(
         t.type == "image" or (t.type == "html_inline" and "<img" in t.content.lower())
         for t in children
     )
-    has_fa = options.rtl and classify_block_direction(inline_token.content) == "rtl"
+    has_fa = options.rtl and classify_block_direction(inline_prose(inline_token.children or [])) == "rtl"
     if has_image:
         paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
     elif has_fa:
@@ -767,7 +771,10 @@ def _add_list_item(
     number_id: int | None = None,
 ) -> None:
     paragraph = document.add_paragraph()
-    is_item_rtl = options.rtl and classify_block_direction(inline_token.content) == "rtl"
+    is_item_rtl = options.rtl and (
+        inline_token.meta.get("rtl_field")
+        or classify_block_direction(inline_prose(inline_token.children or [])) == "rtl"
+    )
     if is_item_rtl:
         _set_paragraph_rtl(paragraph)
         paragraph.paragraph_format.right_indent = Inches(0.25 * (level + 1))

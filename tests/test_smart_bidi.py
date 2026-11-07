@@ -77,14 +77,33 @@ English paragraph.
 def test_bilingual_colon_keys(tmp_path: Path):
     md = """# راهنمای فارسی
 
-* `Installed`: نام ابزار
-* `Verified`: Yes / No
+* `Installed:` نام Skillها
+* `Verified:` Yes / No
+* `Location`: مسیر نصب
+* **Method:** روش نصب
+* Warnings: فقط در صورت وجود مشکل
 * Repository با موفقیت دریافت شد.
 """
-    doc = build_html(md, HtmlBuildOptions(source_path=tmp_path / "test.md"))
-    # The key + colon should be isolated in <bdi> to prevent colon inversion
-    assert "<bdi><code>Installed</code>:</bdi>" in doc.html
-    # Pure Latin line should be wrapped in <bdi>
-    assert "<bdi><code>Verified</code>: Yes / No</bdi>" in doc.html
-    # Persian list containing Latin keyword at start remains intact
+    source = tmp_path / "test.md"
+    doc = build_html(md, HtmlBuildOptions(source_path=source))
+    for label, value in [
+        ("<code>Installed:</code>", "نام Skillها"),
+        ("<code>Verified:</code>", "Yes / No"),
+        ("<code>Location</code>:", "مسیر نصب"),
+        ("<strong>Method:</strong>", "روش نصب"),
+        ("Warnings:", "فقط در صورت وجود مشکل"),
+    ]:
+        assert f'<bdi dir="ltr">{label}</bdi> <bdi dir="auto">{value}</bdi>' in doc.html
     assert "Repository با موفقیت دریافت شد." in doc.html
+
+    output = tmp_path / "fields.docx"
+    build_docx(md, DocxBuildOptions(source_path=source, rtl=True), output_path=output)
+    items = Document(output).paragraphs[1:]
+    assert all(item._p.xpath("w:pPr/w:numPr") for item in items)
+    assert all(item._p.xpath("w:pPr/w:bidi[not(@w:val)]") for item in items)
+    assert items[0].text.replace("\u200f", "") == "Installed: نام Skillها"
+    assert items[1].text.replace("\u200f", "") == "Verified: Yes / No"
+    assert any(run.text == "Method:" and run.bold for run in items[3].runs)
+
+    english = build_html("- `Verified:` Yes / No", HtmlBuildOptions(source_path=source))
+    assert '<ul dir="ltr">\n<li><bdi><code>Verified:</code> Yes / No</bdi></li>' in english.html

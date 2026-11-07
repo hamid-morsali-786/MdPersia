@@ -15,8 +15,13 @@ Strategy:
 from __future__ import annotations
 
 import re
+from copy import copy
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from markdown_it.token import Token
 
 # Persian/Arabic Unicode blocks including ZWNJ (\u200C) and ZWJ (\u200D)
 PERSIAN_RE = re.compile(
@@ -63,6 +68,58 @@ LATIN_RE = re.compile(r"[a-zA-Z]")
 def count_latin(text: str) -> int:
     """Return total count of Latin letters in text."""
     return len(LATIN_RE.findall(text))
+
+
+def inline_prose(tokens: list[Token]) -> str:
+    """Read visible words without link destinations, code or math commands."""
+    return " ".join(token.content for token in tokens if token.type in {"text", "image"})
+
+
+_LATIN_FIELD_NAME = r"[A-Za-z][A-Za-z0-9_.-]*(?:[ \t]+[A-Za-z0-9_.-]+)*"
+
+
+def split_latin_field(tokens: list[Token]) -> tuple[list[Token], list[Token]] | None:
+    """Split a leading Latin label and its value without discarding inline formatting."""
+    # MarkdownIt can leave an empty text token before a leading bold span.
+    if tokens and tokens[0].type == "text" and not tokens[0].content:
+        tokens = tokens[1:]
+    if not tokens:
+        return None
+    first = tokens[0]
+    if first.type == "text":
+        match = re.match(_LATIN_FIELD_NAME + r"[ \t]*:(?=\s|$)", first.content)
+        if not match:
+            return None
+        label_token = copy(first)
+        label_token.content = match[0]
+        label, rest, suffix = [label_token], tokens[1:], first.content[match.end():]
+    else:
+        if first.type == "code_inline":
+            label, rest, text = tokens[:1], tokens[1:], first.content
+        elif (first.type in {"strong_open", "em_open"} and len(tokens) >= 3
+              and tokens[1].type == "text" and tokens[2].type == first.type.replace("open", "close")):
+            label, rest, text = tokens[:3], tokens[3:], tokens[1].content
+        else:
+            return None
+        if not re.fullmatch(_LATIN_FIELD_NAME + r"[ \t]*:?", text):
+            return None
+        suffix = rest[0].content if rest and rest[0].type == "text" else ""
+        if not text.endswith(":"):
+            colon = re.match(r"[ \t]*:(?=\s|$)", suffix)
+            if not colon:
+                return None
+            label_colon = copy(rest[0])
+            label_colon.content = colon[0]
+            label = [*label, label_colon]
+            suffix = suffix[colon.end():]
+        if rest and rest[0].type == "text":
+            first, rest = rest[0], rest[1:]
+
+    if suffix.strip():
+        value_token = copy(first)
+        value_token.content = suffix.lstrip()
+        rest = [value_token, *rest]
+    return (label, rest) if rest else None
 
 
 def detect_direction(text: str) -> str:

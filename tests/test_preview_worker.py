@@ -24,7 +24,7 @@ def test_consecutive_documents_never_replay_the_first_file(tmp_path):
     assert first["id"] == 1 and "First document" in first["html"]
     assert second["id"] == 2 and "سند دوم" in second["html"]
     assert "First document" not in second["html"]
-    assert "<bdi>Host:" in second["html"]
+    assert '<bdi dir="ltr">Host:</bdi> <bdi dir="auto">localhost برای اتصال</bdi>' in second["html"]
 
 
 def test_invalid_requests_and_missing_files_do_not_kill_the_worker(tmp_path):
