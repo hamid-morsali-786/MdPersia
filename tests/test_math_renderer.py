@@ -1,8 +1,10 @@
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
+import pytest
+
 from fa_md_pdf.html_builder import build_markdown_renderer, build_html, HtmlBuildOptions
-from fa_md_pdf.math_renderer import normalize_tex
+from fa_md_pdf.math_renderer import normalize_tex, render_math
 
 FIXTURE = Path(__file__).parent / 'fixtures/math-bilingual.md'
 
@@ -46,3 +48,52 @@ def test_invalid_formula_does_not_hide_following_paragraph():
     result = build_markdown_renderer().render('$$\n\\frac{\n$$\n\nپایان سند')
     assert 'math-error' in result
     assert 'پایان سند' in result
+
+
+def test_aligned_equations_keep_rows_alignment_and_boxed_result():
+    source = r"""متن فارسی
+
+$$
+\begin{aligned}
+\gamma &= 10^{20/10}=100\\
+C &= 500\,000\log_2(101)
+\approx 3\,329\,106\ \mathrm{bit/s}
+\approx \boxed{3.329\ \mathrm{Mbit/s}}
+\end{aligned}
+$$
+"""
+    import re
+    result = build_markdown_renderer().render(source)
+    assert 'math-error' not in result
+    math = ET.fromstring(re.search(r'<math\b.*?</math>', result, re.S).group())
+    ns = {'m': 'http://www.w3.org/1998/Math/MathML'}
+    rows = math.findall('.//m:mtable/m:mtr', ns)
+    assert len(rows) == 2
+    for row, symbol in zip(rows, ('γ', 'C'), strict=True):
+        left, right = row.findall('m:mtd', ns)
+        assert ''.join(left.itertext()) == symbol
+        assert (left.get('columnalign'), right.get('columnalign')) == ('right', 'left')
+        assert ''.join(right.itertext()).startswith('=')
+    assert rows[1].find('.//m:menclose', ns) is not None
+
+
+@pytest.mark.parametrize('source, columns', [
+    (r'\begin{aligned}[t]a&=b\\c&=d\end{aligned}', 2),
+    (r'\begin{align}a&=b\\c&=d\end{align}', 2),
+    (r'\begin{gathered}a=b\\c=d\end{gathered}', 1),
+    (r'\begin{gather*}a=b\\c=d\end{gather*}', 1),
+])
+def test_multiline_environments_preserve_table_shape(source, columns):
+    root = ET.fromstring(render_math(source, {'display_mode': True}))
+    ns = {'m': 'http://www.w3.org/1998/Math/MathML'}
+    rows = root.findall('.//m:mtable/m:mtr', ns)
+    assert len(rows) == 2
+    assert all(len(row.findall('m:mtd', ns)) == columns for row in rows)
+    assert [''.join(row.itertext()) for row in rows] == ['a=b', 'c=d']
+
+
+def test_literal_xml_characters_in_formula_text_stay_visible_and_safe():
+    result = render_math(r'\text{A & B < C > D}', {'display_mode': False})
+    root = ET.fromstring(result)
+    assert root.tag == '{http://www.w3.org/1998/Math/MathML}math'
+    assert ''.join(root.itertext()).replace('\u00a0', ' ') == 'A & B < C > D'

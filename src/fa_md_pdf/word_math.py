@@ -14,21 +14,59 @@ from .math_renderer import render_math
 logger = logging.getLogger(__name__)
 
 
+def _preserve_matrix_alignment(mathml: ET.Element, equation) -> None:
+    tables = list(mathml.iter("mtable"))
+    matrices = list(equation.iter(qn("m:m")))
+    if len(tables) != len(matrices):
+        return
+    for table, matrix in zip(tables, matrices, strict=True):
+        row = matrix.find(qn("m:mr"))
+        alignments = [cell.get("columnalign") for cell in table.findall("mtr[1]/mtd")]
+        if row is None:
+            continue
+        # MathML specifies alignment on cells; Word stores it per column.
+        width = len(row.findall(qn("m:e")))
+        if len(alignments) != width or not any(value in {"left", "right"} for value in alignments):
+            continue
+        properties = matrix.find(qn("m:mPr"))
+        if properties is None:
+            properties = OxmlElement("m:mPr")
+            matrix.insert(0, properties)
+        if properties.find(qn("m:mcs")) is not None:
+            continue
+        columns = OxmlElement("m:mcs")
+        for alignment in alignments:
+            column = OxmlElement("m:mc")
+            column_props = OxmlElement("m:mcPr")
+            count = OxmlElement("m:count")
+            count.set(qn("m:val"), "1")
+            justify = OxmlElement("m:mcJc")
+            justify.set(qn("m:val"), alignment if alignment in {"left", "right"} else "center")
+            column_props.extend([count, justify])
+            column.append(column_props)
+            columns.append(column)
+        properties.append(columns)
+
+
 def append_equation(paragraph, source: str, *, display: bool = False) -> None:
     """Keep malformed/unsupported TeX visible instead of dropping document content."""
     try:
         mathml = ET.fromstring(render_math(source, {"display_mode": display}))
         if mathml.tag.rsplit("}", 1)[-1] != "math":
             raise ValueError("invalid TeX")
-        # mathml2omml otherwise drops TeX spacing commands (mspace).
+        # mathml2omml expects unprefixed MathML names, independent of the
+        # process-wide ElementTree namespace registry.
         for node in mathml.iter():
-            if node.tag.endswith("}mspace"):
+            node.tag = node.tag.rsplit("}", 1)[-1]
+            # mathml2omml otherwise drops TeX spacing commands (mspace).
+            if node.tag == "mspace":
                 width = node.get("width", "0")
-                node.tag = "{http://www.w3.org/1998/Math/MathML}mtext"
+                node.tag = "mtext"
                 node.attrib.clear()
                 node.text = "\u2009" if not width.startswith("-") else ""
         xml = convert(ET.tostring(mathml, encoding="unicode"))
         equation = parse_xml(xml.replace("<m:oMath>", f"<m:oMath {nsdecls('m', 'w')}>"))
+        _preserve_matrix_alignment(mathml, equation)
         # The converter wraps every mrow in an unbreakable box. Plain grouping
         # needs no Office box and must allow Word to wrap at binary operators.
         for box in reversed(list(equation.iter(qn("m:box")))):
