@@ -9,7 +9,7 @@ from __future__ import annotations
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 PROG_ID = "MdPersia.Markdown"
 PROGID_KEY = rf"Software\Classes\{PROG_ID}"
@@ -42,7 +42,7 @@ def open_command(exe: str, extra_args: str | None = None) -> str:
     inert there and cannot be mistaken for a document.
     """
     if extra_args is None:
-        name = Path(exe).name.lower()
+        name = PureWindowsPath(exe).name.lower()
         launcher = "-m mdpersia " if name.startswith("python") else ""
         extra_args = f"{launcher}{VIEWER_FLAG}"
     quoted = f'"{exe}"'
