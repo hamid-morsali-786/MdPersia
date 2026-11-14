@@ -470,15 +470,15 @@ def _render_inline_tokens(
 
 # ─── Mermaid extraction (without HTML conversion) ──────────────────
 
-def extract_mermaid_blocks(text: str) -> tuple[str, list[str]]:
+def extract_mermaid_blocks(text: str, *, source_path: Path | None = None) -> tuple[str, list[str]]:
     """Discover actual fences, never Mermaid examples inside another code fence."""
-    tokens = _build_renderer().parse(strip_front_matter(text))
+    tokens = _build_renderer(source_path=source_path).parse(strip_front_matter(text))
     return text, [t.content.strip() for t in tokens
                   if t.type == "fence" and t.info.strip().lower() == "mermaid"]
 
 
-def _build_renderer() -> MarkdownIt:
-    return build_markdown_renderer()
+def _build_renderer(*, source_path: Path | None = None) -> MarkdownIt:
+    return build_markdown_renderer(source_path=source_path)
 
 
 def _bookmark_name(slug: str) -> str:
@@ -993,7 +993,7 @@ def build_docx(
     if options.strip_emojis:
         markdown_text = strip_emojis(markdown_text)
     text = strip_front_matter(markdown_text)
-    renderer = _build_renderer()
+    renderer = _build_renderer(source_path=options.source_path)
     env = {}
     tokens = renderer.parse(text, env)
     title = env.get("document_title", options.source_path.stem)
@@ -1001,6 +1001,11 @@ def build_docx(
                       if t.type == "fence" and t.info.strip().lower() == "mermaid"]
 
     document = create_document(options)
+    if options.source_path.suffix.lower() == ".mdx":
+        from .mdx import MDX_NOTICE
+        notice = document.add_paragraph()
+        _set_paragraph_rtl(notice)
+        _add_styled_run(notice, MDX_NOTICE, font_name=options.font_family, rtl=True, italic=True)
 
     document.core_properties.title = _clean_xml_text(title)[:255]
     _render_blocks(document, tokens, options)

@@ -296,6 +296,14 @@ output_file = wrap_rtl_in_file(Path("docs/guide.md"))
 
 ---
 
+### Input formats in the current source
+
+This branch supports reading, editing, saving and converting `.md`, `.markdown`, `.mdown`, `.mkd`, `.mkdn`, `.mdwn` and `.mdx`. Using this feature in the installed app requires a newly built and installed package.
+
+MDX opens in static mode. Markdown, tables, math and Mermaid use the existing renderer. Imports/exports, JSX tags and JavaScript expressions remain readable source. Interactive React components require the author's project and dependencies. A static-mode notice appears in the preview and PDF/Word outputs. Saving preserves the original extension and text encoding. `--wrap-rtl` rejects MDX explicitly because rewriting its structure can break the source code.
+
+These extensions work in file selection, folder import and local document links. `--extensions` still accepts custom filters. Folder batch conversion rejects inputs with the same output destination before writing files.
+
 ## Installation
 
 ### 🖥️ Windows Desktop Installer (Zero Prerequisites)
@@ -413,7 +421,7 @@ Features:
 | `--strip-emojis` | Flag | `False` | Strip emojis while preserving Persian ZWNJ |
 | `--recursive` | Flag | `True` | Recursively scan subfolders for markdown |
 | `--no-recursive` | Flag | - | Only convert files directly in input folder |
-| `--extensions` | List | `.md .markdown` | Recognized markdown file extensions |
+| `--extensions` | List | `.md .markdown .mdown .mkd .mkdn .mdwn .mdx` | Recognized Markdown extensions in the current source |
 | `--font-family` | String | Vazirmatn | CSS font-family stack |
 | `--font-file` | Path | - | Custom local font file |
 | `--font-dir` | Path | `./fonts` | Directory containing Vazirmatn fonts |

@@ -1,3 +1,4 @@
+import { isMarkdownPath } from './documentFormats';
 import type { QueueItem } from '../types';
 
 /** Windows paths are case insensitive; a basename is never a document identity. */
@@ -47,7 +48,7 @@ export function linkedMarkdownPath(source: string, href: string): string | null 
     try { const url = new URL(target); target = url.hostname ? `//${url.hostname}${url.pathname}` : url.pathname.replace(/^\/([a-z]:)/i, '$1'); }
     catch { return null; }
   }
-  if (!/\.(md|markdown)$/i.test(target)) return null;
+  if (!isMarkdownPath(target)) return null;
   const current = source.replace(/\\/g, '/');
   target = target.replace(/\\/g, '/');
   if (!target.startsWith('/') && !/^[a-z]:\//i.test(target)) target = current.slice(0, current.lastIndexOf('/') + 1) + target;

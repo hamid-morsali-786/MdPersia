@@ -1,3 +1,4 @@
+import { DOCUMENT_EXTENSIONS } from './services/documentFormats';
 import React, { lazy, Suspense, useState, useEffect, useCallback, useRef } from 'react';
 import { QueueItem, ConvertOptions, LogEntry, ProgressEvent } from './types';
 import { DEFAULT_CONVERT_OPTIONS } from './services/cliTranslator';
@@ -389,7 +390,7 @@ export const App: React.FC = () => {
     setNativeBusy('files');
     setStatusMessage('در انتظار انتخاب فایل… دیالوگ ویندوز را ببینید');
     try {
-      const res = await pickFiles(['md', 'markdown'], 'انتخاب اسناد مارک‌داون');
+      const res = await pickFiles(DOCUMENT_EXTENSIONS, 'انتخاب اسناد مارک‌داون');
       if (res.error) {
         appendLog('error', `File picker failed: ${res.error}`);
         setStatusMessage('دیالوگ انتخاب فایل باز نشد؛ جزئیات در کنسول.');

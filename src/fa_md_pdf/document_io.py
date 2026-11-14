@@ -11,6 +11,7 @@ import tempfile
 import time
 from contextlib import contextmanager
 from pathlib import Path
+from .formats import DOCUMENT_EXTENSIONS
 
 MAX_DOCUMENT_BYTES = 16 * 1024 * 1024
 
@@ -25,7 +26,7 @@ def document_path(value: str, *, must_exist: bool = True) -> Path:
     if not isinstance(value, str) or not value or "\0" in value:
         raise DocumentError("INVALID", "مسیر سند معتبر نیست.")
     source = Path(value).resolve()
-    if source.suffix.lower() not in {".md", ".markdown"}:
+    if source.suffix.lower() not in DOCUMENT_EXTENSIONS:
         raise DocumentError("INVALID", "فقط فایل Markdown قابل ویرایش است.")
     if must_exist and not source.is_file():
         raise DocumentError("NOT_FOUND", "فایل پیدا نشد؛ می‌توانید پیش‌نویس را با نام دیگری ذخیره کنید.")

@@ -1,3 +1,4 @@
+import { DEFAULT_EXTENSIONS, isMarkdownPath } from './documentFormats';
 import { ConvertOptions, QueueItem } from '../types';
 
 /**
@@ -56,6 +57,9 @@ export function buildCliArgs(item: QueueItem, options: ConvertOptions): string[]
       .map(e => e.trim())
       .filter(Boolean)
       .map(e => (e.startsWith('.') ? e : `.${e}`));
+    // The selected document must remain convertible with older saved filters.
+    const suffix = '.' + item.path.split('.').pop()!.toLowerCase();
+    if (isMarkdownPath(item.path) && !exts.includes(suffix)) exts.push(suffix);
     if (exts.length > 0) {
       args.push('--extensions', ...exts);
     }
@@ -97,5 +101,5 @@ export const DEFAULT_CONVERT_OPTIONS: ConvertOptions = {
   verbose: false,
   wrapRtlSuffix: '.rtl.md',
   watch: false,
-  extensions: '.md, .markdown',
+  extensions: DEFAULT_EXTENSIONS,
 };

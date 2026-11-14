@@ -10,12 +10,13 @@ import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path, PureWindowsPath
+from .formats import DOCUMENT_EXTENSIONS
 
 PROG_ID = "MdPersia.Markdown"
 PROGID_KEY = rf"Software\Classes\{PROG_ID}"
 APP_NAME = "MdPersia Markdown Viewer"
 VERB_LABEL = "باز کردن با MdPersia"
-EXTENSIONS = (".md", ".markdown")
+EXTENSIONS = DOCUMENT_EXTENSIONS
 REGISTERED_APPS_KEY = r"Software\RegisteredApplications"
 VIEWER_FLAG = "--gui"
 

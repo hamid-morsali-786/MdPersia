@@ -1,3 +1,4 @@
+import { isMarkdownPath } from './documentFormats';
 import { previewStyles } from './previewStyles';
 import { QueueItem, ConvertOptions, LogEntry, ProgressEvent } from '../types';
 import { buildCliArgs } from './cliTranslator';
@@ -276,21 +277,21 @@ export interface ScannedFile {
   relativePath: string;
 }
 
-const MARKDOWN = /\.(md|markdown)$/i;
+
 
 /**
  * Markdown file handed to the process on launch (double-click / `mdpersia --gui file.md`).
  * In the dev/web build the launcher passes it as `?file=`.
  */
 export async function resolveStartupFiles(): Promise<string[]> {
-  const fromQuery = new URLSearchParams(window.location.search).getAll('file').filter(path => MARKDOWN.test(path));
+  const fromQuery = new URLSearchParams(window.location.search).getAll('file').filter(path => isMarkdownPath(path));
   if (fromQuery.length) return fromQuery;
 
   if (!isTauri()) return [];
   try {
     const { invoke } = await import('@tauri-apps/api/core');
     const args: string[] = await invoke('startup_arguments');
-    return args.filter((a) => MARKDOWN.test(a));
+    return args.filter((a) => isMarkdownPath(a));
   } catch {
     return [];
   }
@@ -311,7 +312,7 @@ export async function onOpenFileRequested(
     events.onmessage = (event) => {
       try {
         const payload = JSON.parse(event.data);
-        if (typeof payload.path === 'string' && MARKDOWN.test(payload.path)) handler(payload.path);
+        if (typeof payload.path === 'string' && isMarkdownPath(payload.path)) handler(payload.path);
       } catch { /* Ignore incomplete events during reconnect. */ }
     };
     return () => events.close();
@@ -321,11 +322,11 @@ export async function onOpenFileRequested(
     const { invoke } = await import('@tauri-apps/api/core');
     const drain = async () => {
       const paths = await invoke<string[]>('startup_arguments');
-      for (const path of paths) if (MARKDOWN.test(path)) handler(path);
+      for (const path of paths) if (isMarkdownPath(path)) handler(path);
     };
     const unlisten = await listen('open-files', () => { void drain().catch(error => console.error('Opening document failed', error)); });
     const unlistenDrop = await listen<{ paths: string[] }>('tauri://drag-drop', event => {
-      for (const path of event.payload.paths) if (MARKDOWN.test(path)) handler(path);
+      for (const path of event.payload.paths) if (isMarkdownPath(path)) handler(path);
     });
     // Catch launches delivered between startup and listener registration.
     await drain();
@@ -621,7 +622,7 @@ export async function loadPreviewDocument(
     // A webview cannot load file://; route local assets through the asset protocol.
     const mapped = resolvePreviewResources(html).replace(/file:\/\/([^"')\s]+)/g, (_m, raw: string) => {
       const p = decodeURIComponent(raw).replace(/^\/([A-Za-z]:)/, '$1');
-      if (/\.(md|markdown)(?:[?#].*)?$/i.test(p)) return `file://${raw}`;
+      if (isMarkdownPath(p.split(/[?#]/)[0])) return `file://${raw}`;
       const name = p.split(/[\\/]/).pop() || '';
       if (/\.ttf$/i.test(name)) return new URL(`/fonts/${name}`, window.location.href).href;
       if (/mermaid.*\.js$/i.test(name)) return new URL(`/vendor/${name}`, window.location.href).href;
@@ -646,7 +647,7 @@ export async function loadDraftPreview(path: string, text: string, signal?: Abor
     const { html } = await invoke<{ html: string }>('preview_html', { request: { path, text, theme: 'light', zoom: 100 } });
     return { kind: 'document', html: resolvePreviewResources(html).replace(/file:\/\/([^"')\s]+)/g, (_match, raw: string) => {
       const p = decodeURIComponent(raw).replace(/^\/([A-Za-z]:)/, '$1');
-      if (/\.(md|markdown)(?:[?#].*)?$/i.test(p)) return `file://${raw}`;
+      if (isMarkdownPath(p.split(/[?#]/)[0])) return `file://${raw}`;
       const name = p.split(/[\\/]/).pop() || '';
       if (/\.ttf$/i.test(name)) return new URL(`/fonts/${name}`, window.location.href).href;
       if (/mermaid.*\.js$/i.test(name)) return new URL(`/vendor/${name}`, window.location.href).href;

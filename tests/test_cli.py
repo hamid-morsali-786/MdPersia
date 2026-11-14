@@ -65,7 +65,8 @@ def test_parser_defaults():
     assert args.docx_image_scale == 3
     assert args.docx_font_size == 12
     assert args.recursive is True
-    assert args.extensions == [".md", ".markdown"]
+    from fa_md_pdf.formats import DOCUMENT_EXTENSIONS
+    assert args.extensions == list(DOCUMENT_EXTENSIONS)
     assert args.page_format == "A4"
     assert args.margin == "15mm"
     assert args.landscape is False

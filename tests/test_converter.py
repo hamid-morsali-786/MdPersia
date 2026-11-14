@@ -23,8 +23,9 @@ from fa_md_pdf.converter import (
 
 
 def test_normalize_extensions_edge_cases():
-    assert normalize_extensions([]) == (".md", ".markdown")
-    assert normalize_extensions(["   ", ""]) == (".md", ".markdown")
+    from fa_md_pdf.formats import DOCUMENT_EXTENSIONS
+    assert normalize_extensions([]) == DOCUMENT_EXTENSIONS
+    assert normalize_extensions(["   ", ""]) == DOCUMENT_EXTENSIONS
     assert normalize_extensions([".MD", "md", ".Markdown", "mD"]) == (".md", ".markdown")
     assert normalize_extensions(["txt", ".md"]) == (".txt", ".md")
 

@@ -55,7 +55,10 @@ def preflight(job, options):
     text = read_text_safely(job.source)
     stripped = strip_front_matter(text)
     offset = len(text.splitlines()) - len(stripped.splitlines())
-    tokens = build_markdown_renderer().parse(stripped)
+    tokens = build_markdown_renderer(source_path=job.source).parse(stripped)
+    if job.source.suffix.lower() == ".mdx":
+        from .mdx import MDX_NOTICE
+        warn("mdx.static", MDX_NOTICE)
     for token in tokens:
         line = token.map[0] + 1 + offset if token.map else None
         for node in [token, *(token.children or [])]:
