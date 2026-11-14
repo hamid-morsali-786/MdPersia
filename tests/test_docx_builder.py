@@ -228,3 +228,58 @@ def test_parse_docx_length():
     assert parse_docx_length("invalid") == Mm(15.0)
     assert parse_docx_length("") == Mm(15.0)
 
+
+def test_docx_code_block_and_ascii_diagram_direction_and_fonts(tmp_path: Path) -> None:
+    md_content = """# مستندات سیستم
+
+```
++---------------+
+| کاربر (User)  | ----> [سرور]
++---------------+
+```
+
+```python
+# تابع خوش‌آمدگویی
+def greet(name: str) -> str:
+    return f"سلام {name}"
+```
+"""
+    input_file = tmp_path / "ascii_test.md"
+    input_file.write_text(md_content, encoding="utf-8")
+    output_file = tmp_path / "ascii_test.docx"
+
+    options = DocxBuildOptions(source_path=input_file)
+    build_docx(md_content, options, output_file)
+
+    assert output_file.is_file()
+    doc = docx.Document(output_file)
+
+    # 1. ASCII diagram paragraph check
+    diagram_p = [p for p in doc.paragraphs if "+---------------+" in p.text]
+    assert len(diagram_p) == 1
+    p = diagram_p[0]
+
+    bidi_nodes = p._p.xpath(".//w:bidi")
+    assert len(bidi_nodes) > 0
+    assert bidi_nodes[0].get("{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val") == "0"
+    jc_nodes = p._p.xpath(".//w:jc")
+    assert len(jc_nodes) > 0
+    assert jc_nodes[0].get("{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val") == "left"
+
+    # Persian runs in diagram should have w:rtl while ASCII runs have w:rtl val="0"
+    persian_runs = [r for r in p.runs if any("\u0600" <= c <= "\u06ff" for c in r.text)]
+    ascii_runs = [r for r in p.runs if not any("\u0600" <= c <= "\u06ff" for c in r.text)]
+    assert len(persian_runs) >= 2  # 'کاربر', 'سرور'
+    assert len(ascii_runs) >= 2    # borders, arrows
+
+    for pr in persian_runs:
+        rtl = pr._r.xpath(".//w:rtl")
+        assert len(rtl) > 0
+        assert rtl[0].get("{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val") is None  # <w:rtl/>
+
+    for ar in ascii_runs:
+        rtl = ar._r.xpath(".//w:rtl")
+        assert len(rtl) > 0
+        assert rtl[0].get("{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val") == "0"  # <w:rtl w:val="0"/>
+
+

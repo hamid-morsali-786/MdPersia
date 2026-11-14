@@ -251,6 +251,14 @@ def build_markdown_renderer(*, source_path: Path | None = None) -> MarkdownIt:
         "field_separator": lambda *_: '</bdi> <bdi dir="auto">',
         "field_value_close": lambda *_: '</bdi>',
     })
+    def _ensure_pre_ltr(rendered_html: str) -> str:
+        if rendered_html.startswith("<pre>"):
+            return '<pre dir="ltr">' + rendered_html[5:]
+        if rendered_html.startswith("<pre "):
+            if 'dir=' not in rendered_html[:20]:
+                return '<pre dir="ltr" ' + rendered_html[5:]
+        return rendered_html
+
     original_fence = renderer.renderer.rules["fence"]
 
     def fence(tokens, index, options, env):
@@ -258,9 +266,15 @@ def build_markdown_renderer(*, source_path: Path | None = None) -> MarkdownIt:
         if token.info.strip().lower() == "mermaid":
             env["has_mermaid"] = True
             return '<pre class="mermaid">\n' + html.escape(token.content.strip()) + '\n</pre>\n'
-        return original_fence(tokens, index, options, env)
+        return _ensure_pre_ltr(original_fence(tokens, index, options, env))
 
     renderer.renderer.rules["fence"] = fence
+
+    original_code_block = renderer.renderer.rules.get("code_block")
+    if original_code_block:
+        renderer.renderer.rules["code_block"] = lambda tokens, index, options, env: _ensure_pre_ltr(
+            original_code_block(tokens, index, options, env)
+        )
     renderer.add_render_rule("table_open", lambda self, tokens, i, options, env:
                              '<div class="md-table-scroll">' + self.renderToken(tokens, i, options, env))
     renderer.add_render_rule("table_close", lambda self, tokens, i, options, env:

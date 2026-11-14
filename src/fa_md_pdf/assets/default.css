@@ -122,14 +122,22 @@ pre {
   direction: ltr !important;
   text-align: left !important;
   unicode-bidi: isolate !important;
-  font-family: Consolas, "Cascadia Mono", "Courier New", monospace;
+  font-family: Consolas, "Cascadia Mono", "Courier New", "Vazirmatn", monospace;
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 0.9em;
+  overflow-x: auto;
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
+  margin: 1em 0;
 }
 
 code,
 kbd,
 samp {
   unicode-bidi: isolate !important;
-  font-family: Consolas, "Cascadia Mono", "Courier New", monospace;
+  font-family: Consolas, "Cascadia Mono", "Courier New", "Vazirmatn", monospace;
 }
 
 code {
@@ -139,19 +147,17 @@ code {
   font-size: 0.9em;
 }
 
-pre {
-  background: #f3f4f6;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  padding: 0.9em;
-  overflow-wrap: break-word;
-  white-space: pre-wrap;
-  margin: 1em 0;
-}
-
 pre code {
   background: transparent;
   padding: 0;
+}
+
+pre,
+pre code,
+pre :is(code, span, a, strong, em, b, i, u, s, mark) {
+  direction: ltr !important;
+  text-align: left !important;
+  unicode-bidi: normal !important;
 }
 
 .mermaid {

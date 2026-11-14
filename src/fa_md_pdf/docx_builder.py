@@ -572,6 +572,52 @@ CALLOUT_CONFIGS = {
 }
 
 
+PERSIAN_RUN_RE = re.compile(
+    r"([\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF\u200C\u200D]+)"
+)
+
+
+def _add_code_run_segment(
+    paragraph: "Paragraph",
+    text: str,
+    options: DocxBuildOptions,
+    *,
+    bold: bool = False,
+    italic: bool = False,
+    color: RGBColor | None = None,
+) -> None:
+    if not text:
+        return
+    if has_persian(text):
+        for piece in PERSIAN_RUN_RE.split(text):
+            if not piece:
+                continue
+            is_p = bool(PERSIAN_RUN_RE.match(piece))
+            _add_styled_run(
+                paragraph,
+                piece,
+                font_name=options.font_family,
+                font_size_pt=options.font_size_pt - 1,
+                bold=bold,
+                italic=italic,
+                color=color,
+                code=True,
+                rtl=is_p,
+            )
+    else:
+        _add_styled_run(
+            paragraph,
+            text,
+            font_name=options.font_family,
+            font_size_pt=options.font_size_pt - 1,
+            bold=bold,
+            italic=italic,
+            color=color,
+            code=True,
+            rtl=False,
+        )
+
+
 def _add_code_block(
     document: "DocxDocument",
     code: str,
@@ -583,6 +629,9 @@ def _add_code_block(
     _set_paragraph_ltr(paragraph)
     paragraph.paragraph_format.left_indent = Inches(0.2)
     paragraph.paragraph_format.right_indent = Inches(0.2)
+    paragraph.paragraph_format.line_spacing = 1.15
+    paragraph.paragraph_format.space_before = Pt(4)
+    paragraph.paragraph_format.space_after = Pt(6)
 
     # Add shading via XML
     pPr = paragraph._p.get_or_add_pPr()
@@ -631,25 +680,19 @@ def _add_code_block(
             elif ttype in Operator:
                 color = RGBColor(0x55, 0x55, 0x55)
 
-            _add_styled_run(
+            _add_code_run_segment(
                 paragraph,
                 val,
-                font_name=options.font_family,
-                font_size_pt=options.font_size_pt - 1,
+                options,
                 bold=bold,
                 italic=italic,
                 color=color,
-                code=True,
-                rtl=False,
             )
     else:
-        _add_styled_run(
+        _add_code_run_segment(
             paragraph,
             code.rstrip("\n"),
-            font_name=options.font_family,
-            font_size_pt=options.font_size_pt - 1,
-            code=True,
-            rtl=False,
+            options,
         )
 
 

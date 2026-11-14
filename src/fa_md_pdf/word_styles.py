@@ -211,7 +211,7 @@ def _apply_run_formatting(run, style: RunStyle) -> None:
         _set_run_italic_cs(run)
     if style.color is not None:
         run.font.color.rgb = style.color
-    if style.rtl and not style.code:
+    if style.rtl:
         _set_run_rtl(run)
     else:
         _set_run_ltr(run)
@@ -221,7 +221,7 @@ def _add_single_run(paragraph: "Paragraph", text: str, style: RunStyle):
     """Add a single formatted run to a paragraph."""
     run = paragraph.add_run(_clean_xml_text(text))
     f_name = style.font_name
-    cs_font = None if style.code else f_name
+    cs_font = DEFAULT_DOCX_FONT if style.code else f_name
     _set_run_font(run, f_name, complex_script_font=cs_font)
     _apply_run_formatting(run, style)
     return run

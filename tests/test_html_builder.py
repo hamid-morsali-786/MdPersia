@@ -122,3 +122,30 @@ def test_fix_bidi_nested_list_items_preserves_structure():
     output = fix_bidi_list_items(html_input)
     assert "<li>Child 1</bdi>" not in output
     assert "<li><bdi>Child 1</bdi></li>" in output
+
+
+def test_code_blocks_and_ascii_diagrams_render_pre_dir_ltr():
+    from fa_md_pdf.html_builder import build_markdown_renderer, load_default_css
+
+    renderer = build_markdown_renderer()
+
+    # 1. Fenced code block with syntax highlighting
+    fence_html = renderer.render("```python\nx = 1\n```")
+    assert '<pre dir="ltr"><code dir="ltr" class="language-python">' in fence_html
+
+    # 2. Plain fenced code block / ASCII diagram
+    ascii_diagram = "```\n+---+\n| A |\n+---+\n```"
+    ascii_html = renderer.render(ascii_diagram)
+    assert '<pre dir="ltr"><code dir="ltr">' in ascii_html
+
+    # 3. Indented code block
+    indented_code = "    +---+\n    | B |\n    +---+\n"
+    indented_html = renderer.render(indented_code)
+    assert '<pre dir="ltr"><code>' in indented_html
+
+    # 4. CSS verifies code blocks and inner spans stay LTR without isolated BiDi inversion
+    css = load_default_css()
+    assert 'pre :is(code, span, a, strong, em, b, i, u, s, mark)' in css
+    assert 'unicode-bidi: normal !important;' in css
+    assert 'font-family: Consolas, "Cascadia Mono", "Courier New", "Vazirmatn", monospace;' in css
+
