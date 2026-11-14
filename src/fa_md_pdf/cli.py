@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 from . import __version__
+from .formats import DOCUMENT_EXTENSIONS
 from .defaults import (
     default_browsers_path,
     default_fonts_path,
@@ -93,8 +94,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--extensions",
         nargs="+",
-        default=[".md", ".markdown"],
-        help="Markdown extensions to include. Default: .md .markdown",
+        default=list(DOCUMENT_EXTENSIONS),
+        help="Markdown extensions to include. Default: " + " ".join(DOCUMENT_EXTENSIONS),
     )
 
     parser.add_argument(
@@ -230,7 +231,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--register-associations",
         action="store_true",
         help=(
-            "Register MdPersia as a per-user handler for .md/.markdown files on Windows "
+            "Register MdPersia as a per-user handler for supported Markdown files on Windows "
             "(double-click, 'Open with' and a right-click verb). HKCU only, no elevation. "
             "Reversible with --unregister-associations."
         ),
@@ -357,6 +358,10 @@ def _run_wrap_rtl(args: argparse.Namespace) -> int:
     if not sources:
         print("No Markdown files found.", file=sys.stderr)
         return 2
+    if any(source.suffix.lower() == ".mdx" for source in sources):
+        print("Error: --wrap-rtl cannot rewrite MDX source safely. Use PDF or DOCX for an RTL reading copy.",
+              file=sys.stderr)
+        return 1
 
     output = args.output.resolve() if args.output else None
     suffix = args.wrap_rtl_suffix
@@ -431,10 +436,10 @@ def _normalize_rtl_suffix(suffix: str, default_ext: str) -> str:
     if not suffix:
         return ""
     clean = suffix.strip()
-    if clean.endswith(".markdown"):
-        clean = clean[:-9]
-    elif clean.endswith(".md"):
-        clean = clean[:-3]
+    for extension in DOCUMENT_EXTENSIONS:
+        if clean.lower().endswith(extension):
+            clean = clean[:-len(extension)]
+            break
     clean = clean.strip(".")
     return f".{clean}" if clean else ""
 

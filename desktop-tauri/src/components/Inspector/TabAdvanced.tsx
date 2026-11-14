@@ -1,3 +1,4 @@
+import { DEFAULT_EXTENSIONS } from '../../services/documentFormats';
 import React from 'react';
 import { ConvertOptions } from '../../types';
 
@@ -15,12 +16,12 @@ export const TabAdvanced: React.FC<TabAdvancedProps> = ({ options, onChange }) =
           type="text"
           value={options.extensions}
           onChange={(e) => onChange('extensions', e.target.value)}
-          placeholder=".md, .markdown"
+          placeholder={DEFAULT_EXTENSIONS}
           className="w-full px-3 py-2 rounded bg-input border border-input text-main font-mono focus:border-blue-500 focus:outline-none"
           dir="ltr"
         />
         <span className="text-[11px] text-dim mt-1 block">
-          پسوندها را با کاما جدا کنید (پیش‌فرض: .md, .markdown)
+          پسوندها را با کاما جدا کنید. MDX با پیش‌نمایش ایستا باز می‌شود.
         </span>
       </div>
 

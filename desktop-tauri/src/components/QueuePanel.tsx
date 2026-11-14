@@ -1,3 +1,4 @@
+import { DOCUMENT_ACCEPT } from '../services/documentFormats';
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { QueueItem } from '../types';
 import { QueueItemRow } from './QueueItemRow';
@@ -152,7 +153,7 @@ export const QueuePanel: React.FC<QueuePanelProps> = ({
         ref={fileInputRef}
         onChange={handleFileInputChange}
         multiple
-        accept=".md,.markdown"
+        accept={DOCUMENT_ACCEPT}
         className="hidden"
       />
 

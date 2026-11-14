@@ -236,7 +236,7 @@ def _bidi_plugin(md: MarkdownIt) -> None:
     md.core.ruler.push("bidi_plugin", rule)
 
 
-def build_markdown_renderer() -> MarkdownIt:
+def build_markdown_renderer(*, source_path: Path | None = None) -> MarkdownIt:
     renderer = MarkdownIt(
         "default",
         {"html": True, "breaks": True, "typographer": True, "highlight": _highlight_code},
@@ -286,6 +286,9 @@ def build_markdown_renderer() -> MarkdownIt:
 
     renderer.core.ruler.push("heading_ids", heading_ids)
     math_plugin(renderer)
+    if source_path and source_path.suffix.lower() == ".mdx":
+        from .mdx import static_mdx_plugin
+        renderer.use(static_mdx_plugin)
     _bidi_plugin(renderer)
     return renderer
 
@@ -559,7 +562,7 @@ def build_html(markdown_text: str, options: HtmlBuildOptions) -> HtmlDocument:
     markdown_text = strip_front_matter(markdown_text)
 
 
-    renderer = build_markdown_renderer()
+    renderer = build_markdown_renderer(source_path=options.source_path)
     env = {}
     body_html = renderer.render(markdown_text, env)
     has_mermaid = bool(env.get("has_mermaid"))
@@ -567,6 +570,9 @@ def build_html(markdown_text: str, options: HtmlBuildOptions) -> HtmlDocument:
     body_html = _transform_callouts(body_html, strip_emojis_flag=options.strip_emojis)
     body_html = _transform_pagebreaks(body_html)
     body_html = fix_bidi_list_items(body_html)
+    if options.source_path.suffix.lower() == ".mdx":
+        from .mdx import MDX_NOTICE
+        body_html = '<blockquote dir="rtl" role="note">' + html.escape(MDX_NOTICE) + '</blockquote>\n' + body_html
 
     css = build_css(options)
     base_uri = directory_uri(options.source_path.parent)

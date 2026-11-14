@@ -1,3 +1,4 @@
+import { copyDocumentPath } from '../../services/documentFormats';
 import React, { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { QueueItem } from '../../types';
 import {
@@ -141,9 +142,9 @@ export const PreviewTab: React.FC<PreviewTabProps> = ({
     setCopyBusy(true); setEditorError('');
     try {
       await editor.open(source);
-      let path = await pickSaveMarkdown(source.replace(/(\.(?:md|markdown))$/i, '-copy$1'));
+      let path = await pickSaveMarkdown(copyDocumentPath(source));
       if (!path) return;
-      if (!/\.[^/\\]+$/.test(path)) path += '.md';
+      if (!/\.[^/\\]+$/.test(path)) path += source.slice(source.lastIndexOf('.'));
       if (documentKey(path) === documentKey(source)) { await editor.save(source); return; }
       if (draftIsDirty(editor.ref.current[documentKey(path)])) throw new DocumentFailure('این فایل در صف تغییرات ذخیره‌نشده دارد؛ ابتدا تغییرات همان سند را ذخیره یا کنار بگذارید.');
       try {

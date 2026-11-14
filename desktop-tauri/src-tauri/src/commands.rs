@@ -9,7 +9,50 @@ pub struct Runtime { pub engine: Engine, pub jobs: Jobs, pub pending: Mutex<Vec<
 pub type SharedRuntime = Arc<Runtime>;
 
 pub fn is_markdown(path: &Path) -> bool {
-    path.extension().and_then(|e| e.to_str()).is_some_and(|e| e.eq_ignore_ascii_case("md") || e.eq_ignore_ascii_case("markdown"))
+    static EXTENSIONS: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+    let extensions = EXTENSIONS.get_or_init(|| {
+        serde_json::from_str(include_str!("../../../src/fa_md_pdf/assets/document-formats.json"))
+            .expect("invalid bundled document formats")
+    });
+    path.extension().and_then(|e| e.to_str())
+        .is_some_and(|e| extensions.iter().any(|extension| e.eq_ignore_ascii_case(extension)))
+}
+
+#[cfg(test)]
+mod format_tests {
+    use super::*;
+
+    #[test]
+    fn recognizes_supported_formats_without_accepting_other_extensions() {
+        for extension in ["md", "markdown", "mdown", "mkd", "mkdn", "mdwn", "mdx"] {
+            assert!(is_markdown(Path::new(&format!("guide.{extension}"))));
+            assert!(is_markdown(Path::new(&format!("guide.{}", extension.to_uppercase()))));
+        }
+        for path in ["guide.mdx.exe", "guide.txt", "guide", ".mdx"] {
+            assert!(!is_markdown(Path::new(path)), "{path}");
+        }
+    }
+
+    #[test]
+    fn successive_launches_keep_every_supported_document_in_the_queue() {
+        let root = std::env::temp_dir().join(format!("mdpersia-native-formats-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let runtime = Runtime::default();
+        let mut expected = Vec::new();
+        for extension in ["md", "markdown", "mdown", "mkd", "mkdn", "mdwn", "mdx"] {
+            let name = format!("document.{extension}");
+            let path = root.join(&name);
+            std::fs::write(&path, "# Test").unwrap();
+            queue_files(&runtime, std::iter::once(name.clone()), &root);
+            queue_files(&runtime, std::iter::once(name), &root);
+            expected.push(path.to_string_lossy().into_owned());
+        }
+        assert_eq!(*runtime.pending.lock().unwrap(), expected);
+        for path in expected {
+            std::fs::remove_file(path).unwrap();
+        }
+        std::fs::remove_dir(root).unwrap();
+    }
 }
 
 pub fn queue_files(runtime: &Runtime, args: impl Iterator<Item=String>, cwd: &Path) {

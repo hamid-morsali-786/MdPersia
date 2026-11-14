@@ -13,6 +13,7 @@ from typing import TextIO
 
 from .html_builder import HtmlBuildOptions, build_html, read_text_safely
 from .document_io import document_operation, MAX_DOCUMENT_BYTES
+from .formats import DOCUMENT_EXTENSIONS
 
 
 def serve(root: Path, requests: TextIO, responses: TextIO) -> None:
@@ -28,7 +29,7 @@ def serve(root: Path, requests: TextIO, responses: TextIO) -> None:
                 responses.flush()
                 continue
             source = Path(request["path"]).resolve(strict=True)
-            if source.suffix.lower() not in {".md", ".markdown"} or not source.is_file():
+            if source.suffix.lower() not in DOCUMENT_EXTENSIONS or not source.is_file():
                 raise ValueError("یک فایل Markdown انتخاب کنید.")
             if source.stat().st_size > 16 * 1024 * 1024:
                 raise ValueError("حجم فایل برای پیش‌نمایش از ۱۶ مگابایت بیشتر است.")

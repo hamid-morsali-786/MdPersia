@@ -76,7 +76,8 @@ to `Pezhm4n/MdPersia`; CI uses `GITHUB_REPOSITORY`.
 
 Installation is per user and does not require administrator privileges. Setup
 registers `MdPersia.Markdown`, the native application icon, Start Menu and Open
-With entries for `.md` and `.markdown` under HKCU. Existing Windows UserChoice
+With entries for `.md`, `.markdown`, `.mdown`, `.mkd`, `.mkdn`, `.mdwn` and
+`.mdx` under HKCU. MDX uses the static renderer described in the README. Existing Windows UserChoice
 settings are respected. If another reader is the default, choose **Open with >
 Choose another app > MdPersia > Always use this app** once.
 
@@ -92,6 +93,8 @@ to upgrade. Preserve the app identifier between releases.
 py -3.11 scripts/verify-reader-engine.py output/release/staging --output output/reader-qa
 py -3.11 scripts/verify-frozen-engine.py output/release/conversion-content --output output/converter-qa
 py -3.11 scripts/verify-windows-installer.py <Setup.exe> --output output/installed-win10-qa
+py -3.11 scripts/verify-windows-installer.py <Setup.exe> --skip-native-ui --conversion-pack <matching-pack.zip> --output output/local-installer-qa
+py -3.11 scripts/verify-native-formats.py <installed-MdPersia.exe> --conversion-pack <matching-pack.zip> --output output/native-formats-qa
 ```
 
 Use a fresh output directory. The installer test backs up only the owned
@@ -99,6 +102,15 @@ Markdown registry entries, installs and reinstalls into an isolated directory,
 checks manifest hashes and quoted handler commands, and launches the actual
 installed Tauri app. It uninstalls and restores those registry entries in a
 `finally` block. It does not change Windows UserChoice.
+
+The format test uses the actual native window and a separate WebView2 profile.
+It opens each supported extension, checks successive launches and local links,
+saves an MDX draft with BOM/CRLF preserved, and converts through the native
+commands using the matching local ZIP. It supports local acceptance before
+resource publication and records local ZIP import separately from public download.
+Passing `--conversion-pack` to the installer test runs these checks inside its
+isolated installation before uninstalling. `--skip-native-ui` skips the older
+public-download acceptance suite, not the explicit format checks.
 
 Native acceptance uses a separate WebView2 profile and CDP endpoint. Child PATH
 contains only System32. Checks cover Persian paths, local images/fonts/Mermaid,

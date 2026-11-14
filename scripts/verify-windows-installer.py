@@ -13,11 +13,12 @@ import subprocess
 import sys
 import time
 import winreg
+from fa_md_pdf.formats import DOCUMENT_EXTENSIONS
 
 TREES = [r'Software\Classes\MdPersia.Markdown', r'Software\MdPersia\Capabilities']
-VALUES = [(r'Software\Classes\.md\OpenWithProgids', 'MdPersia.Markdown'),
-          (r'Software\Classes\.markdown\OpenWithProgids', 'MdPersia.Markdown'),
-          (r'Software\RegisteredApplications', 'MdPersia')]
+VALUES = [(rf'Software\Classes\{extension}\OpenWithProgids', 'MdPersia.Markdown')
+          for extension in DOCUMENT_EXTENSIONS]
+VALUES.append((r'Software\RegisteredApplications', 'MdPersia'))
 
 
 def read_value(path, name):
@@ -81,6 +82,8 @@ def main():
     parser.add_argument('setup', type=Path)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--skip-native-ui', action='store_true', help='CI packaging check; does not claim UI acceptance')
+    parser.add_argument('--conversion-pack', type=Path,
+                        help='Also verify every supported format using the matching local conversion ZIP')
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
     output = args.output.resolve()
@@ -110,9 +113,18 @@ def main():
         assert command == f'"{install / "MdPersia.exe"}" "%1"', command
         icon = read_value(TREES[0]+r'\DefaultIcon', '')['value']
         assert 'MdPersia.exe' in icon and 'python' not in icon.lower()
+        for extension in DOCUMENT_EXTENSIONS:
+            assert read_value(rf'Software\Classes\{extension}\OpenWithProgids', 'MdPersia.Markdown') is not None
+            assert read_value(TREES[1]+r'\FileAssociations', extension)['value'] == 'MdPersia.Markdown'
         report['nativeAssociationAndApplicationIcon'] = True
+        report['registeredExtensions'] = list(DOCUMENT_EXTENSIONS)
         subprocess.run([sys.executable, str(root / 'scripts/verify-reader-engine.py'), str(install),
                         '--output', str(output / 'frozen')], check=True)
+        if args.conversion_pack:
+            subprocess.run([sys.executable, str(root / 'scripts/verify-native-formats.py'),
+                            str(install / 'MdPersia.exe'), '--conversion-pack', str(args.conversion_pack.resolve()),
+                            '--output', str(output / 'formats')], check=True)
+            report['supportedFormatsVerifiedInInstalledNativeApp'] = True
         if not args.skip_native_ui:
             subprocess.run([sys.executable, str(root / 'scripts/verify-native-app.py'), str(install / 'MdPersia.exe'),
                             '--output', str(output / 'native'), '--registered-handler'], check=True)

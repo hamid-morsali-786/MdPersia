@@ -75,7 +75,7 @@ Changelog = "https://github.com/hamid-morsali-786/MdPersia/blob/main/CHANGELOG.m
 where = ["src"]
 
 [tool.setuptools.package-data]
-fa_md_pdf = ["assets/*.css", "assets/*.ico", "assets/*.svg", "assets/*.png"]
+fa_md_pdf = ["assets/*.css", "assets/*.ico", "assets/*.svg", "assets/*.png", "assets/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

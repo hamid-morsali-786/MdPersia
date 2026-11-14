@@ -5,10 +5,20 @@
   WriteRegStr HKCU "Software\Classes\MdPersia.Markdown\shell\open\command" "" '"$INSTDIR\MdPersia.exe" "%1"'
   WriteRegStr HKCU "Software\Classes\.md\OpenWithProgids" "MdPersia.Markdown" ""
   WriteRegStr HKCU "Software\Classes\.markdown\OpenWithProgids" "MdPersia.Markdown" ""
+  WriteRegStr HKCU "Software\Classes\.mdown\OpenWithProgids" "MdPersia.Markdown" ""
+  WriteRegStr HKCU "Software\Classes\.mkd\OpenWithProgids" "MdPersia.Markdown" ""
+  WriteRegStr HKCU "Software\Classes\.mkdn\OpenWithProgids" "MdPersia.Markdown" ""
+  WriteRegStr HKCU "Software\Classes\.mdwn\OpenWithProgids" "MdPersia.Markdown" ""
+  WriteRegStr HKCU "Software\Classes\.mdx\OpenWithProgids" "MdPersia.Markdown" ""
   WriteRegStr HKCU "Software\MdPersia\Capabilities" "ApplicationName" "MdPersia"
   WriteRegStr HKCU "Software\MdPersia\Capabilities" "ApplicationDescription" "Persian Markdown reader, editor and converter"
   WriteRegStr HKCU "Software\MdPersia\Capabilities\FileAssociations" ".md" "MdPersia.Markdown"
   WriteRegStr HKCU "Software\MdPersia\Capabilities\FileAssociations" ".markdown" "MdPersia.Markdown"
+  WriteRegStr HKCU "Software\MdPersia\Capabilities\FileAssociations" ".mdown" "MdPersia.Markdown"
+  WriteRegStr HKCU "Software\MdPersia\Capabilities\FileAssociations" ".mkd" "MdPersia.Markdown"
+  WriteRegStr HKCU "Software\MdPersia\Capabilities\FileAssociations" ".mkdn" "MdPersia.Markdown"
+  WriteRegStr HKCU "Software\MdPersia\Capabilities\FileAssociations" ".mdwn" "MdPersia.Markdown"
+  WriteRegStr HKCU "Software\MdPersia\Capabilities\FileAssociations" ".mdx" "MdPersia.Markdown"
   WriteRegStr HKCU "Software\RegisteredApplications" "MdPersia" "Software\MdPersia\Capabilities"
   System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, p 0, p 0)'
 !macroend
@@ -19,6 +29,11 @@
     DeleteRegKey HKCU "Software\Classes\MdPersia.Markdown"
     DeleteRegValue HKCU "Software\Classes\.md\OpenWithProgids" "MdPersia.Markdown"
     DeleteRegValue HKCU "Software\Classes\.markdown\OpenWithProgids" "MdPersia.Markdown"
+    DeleteRegValue HKCU "Software\Classes\.mdown\OpenWithProgids" "MdPersia.Markdown"
+    DeleteRegValue HKCU "Software\Classes\.mkd\OpenWithProgids" "MdPersia.Markdown"
+    DeleteRegValue HKCU "Software\Classes\.mkdn\OpenWithProgids" "MdPersia.Markdown"
+    DeleteRegValue HKCU "Software\Classes\.mdwn\OpenWithProgids" "MdPersia.Markdown"
+    DeleteRegValue HKCU "Software\Classes\.mdx\OpenWithProgids" "MdPersia.Markdown"
     DeleteRegValue HKCU "Software\RegisteredApplications" "MdPersia"
     DeleteRegKey HKCU "Software\MdPersia\Capabilities"
   ${EndIf}

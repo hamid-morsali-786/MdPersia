@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from .formats import DOCUMENT_EXTENSIONS
 from .conversion_report import ConversionIssue, report_conversion, warn
 from .print_layout import prepare_print_layout
 import tempfile
@@ -77,7 +78,7 @@ def build_jobs(
     input_path: Path,
     output: Path | None,
     recursive: bool = True,
-    extensions: Iterable[str] = (".md", ".markdown"),
+    extensions: Iterable[str] = DOCUMENT_EXTENSIONS,
     keep_html: bool = False,
     output_format: str = "pdf",
 ) -> list[ConvertJob]:
@@ -103,8 +104,12 @@ def build_jobs(
 
         files = discover_markdown_files(input_path, recursive=recursive, extensions=extensions)
         jobs: list[ConvertJob] = []
+        destinations: set[Path] = set()
         for source in files:
             out = output_for_file(source, input_path if output else None, output, output_format)
+            if out in destinations:
+                raise ConversionError(f"Multiple input files would write to {out}. Convert them separately or rename them.")
+            destinations.add(out)
             html_output = out.with_suffix(".html") if keep_html else None
             jobs.append(ConvertJob(source=source, output=out, html_output=html_output))
         return jobs
@@ -189,7 +194,7 @@ def _render_job_docx(job: ConvertJob, options: ConvertOptions) -> None:
     markdown_text = read_text_safely(job.source)
 
     # Extract mermaid codes first to render them as PNGs (only if any exist)
-    _, mermaid_codes = extract_mermaid_blocks(markdown_text)
+    _, mermaid_codes = extract_mermaid_blocks(markdown_text, source_path=job.source)
 
     mermaid_images: dict[str, Path] = {}
     if mermaid_codes:

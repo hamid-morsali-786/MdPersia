@@ -1,3 +1,4 @@
+import { DOCUMENT_EXTENSIONS, isMarkdownPath } from './src/services/documentFormats';
 import { previewStyles } from './src/services/previewStyles';
 import { DEFAULT_APP_SETTINGS } from './src/services/appSettings';
 import path from 'node:path';
@@ -7,6 +8,9 @@ import { spawn, execFile, type ChildProcessWithoutNullStreams } from 'node:child
 import { createInterface } from 'node:readline';
 import { randomUUID } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+
+const documentPattern = DOCUMENT_EXTENSIONS.map(extension => '*.' + extension).join(';');
+const DOCUMENT_FILTER = 'Markdown / MDX (' + documentPattern + ')|' + documentPattern;
 
 export type Middleware = (req: IncomingMessage, res: ServerResponse, next: () => void) => void;
 export interface BridgeServer {
@@ -60,6 +64,7 @@ type Picker = 'files' | 'folder' | 'save';
  * caller can report an outcome instead of leaving the button looking dead.
  */
 function pickerScript(kind: Picker, title: string, filter: string, defaultPath = ''): string {
+  const defaultExtension = isMarkdownPath(defaultPath) ? path.extname(defaultPath).slice(1) : 'md';
   const safe = title.replace(/'/g, "''");
   // FolderBrowserDialog only has Description; OpenFileDialog only has Title.
   const dialog =
@@ -68,7 +73,7 @@ function pickerScript(kind: Picker, title: string, filter: string, defaultPath =
 $d.Description = '${safe}'
 $d.ShowNewFolderButton = $true`
       : `$d = New-Object System.Windows.Forms.${kind === 'save' ? 'SaveFileDialog' : 'OpenFileDialog'}
-${kind === 'save' ? `$d.DefaultExt = "md"; $d.AddExtension = $true; $d.OverwritePrompt = $false; $d.FileName = '${defaultPath.replace(/'/g, "''")}'` : '$d.Multiselect = $true'}
+${kind === 'save' ? `$d.DefaultExt = "${defaultExtension}"; $d.AddExtension = $true; $d.OverwritePrompt = $false; $d.FileName = '${defaultPath.replace(/'/g, "''")}'` : '$d.Multiselect = $true'}
 $d.Title = '${safe}'
 $d.Filter = '${filter.replace(/'/g, "''")}'`;
   const result =
@@ -317,7 +322,7 @@ export function installDesktopBridge(server: BridgeServer, production = false) {
     try {
       const body = JSON.parse(await readBody(req));
       const file = typeof body.path === 'string' ? path.resolve(body.path) : '';
-      if (!/\.(md|markdown)$/i.test(file) || !fs.statSync(file).isFile()) {
+      if (!isMarkdownPath(file) || !fs.statSync(file).isFile()) {
         return json(res, { delivered: false }, 400);
       }
       for (const client of windows) client.write(`data: ${JSON.stringify({ path: file })}\n\n`);
@@ -378,13 +383,13 @@ export function installDesktopBridge(server: BridgeServer, production = false) {
   // 2. Native Windows multi-file picker.
   server.middlewares.use('/api/pick-save-file', (req, res) => {
     const defaultPath = new URL(req.url || '', 'http://localhost').searchParams.get('defaultPath') || '';
-    runPicker('save', 'ذخیرهٔ یک نسخهٔ Markdown', 'Markdown (*.md;*.markdown)|*.md;*.markdown', r =>
+    runPicker('save', 'ذخیرهٔ یک نسخهٔ Markdown', DOCUMENT_FILTER, r =>
       json(res, { path: r.paths?.[0] || '', cancelled: !!r.cancelled, error: r.error }), defaultPath);
   });
 
   server.middlewares.use('/api/pick-files', async (req, res) => {
     const url = new URL(req.url || '', 'http://localhost');
-    const exts = (url.searchParams.get('exts') || 'md,markdown')
+    const exts = (url.searchParams.get('exts') || DOCUMENT_EXTENSIONS.join(','))
       .split(',')
       .map((e) => e.trim().replace(/^\./, ''))
       .filter(Boolean);
@@ -423,7 +428,7 @@ export function installDesktopBridge(server: BridgeServer, production = false) {
         withFileTypes: true,
       });
       const files = entries
-        .filter((e) => e.isFile() && (e.name.endsWith('.md') || e.name.endsWith('.markdown')))
+        .filter((e) => e.isFile() && isMarkdownPath(e.name))
         .map((e) => {
           const parent = (e as any).parentPath || folderPath;
           const fullPath = path.join(parent, e.name);
@@ -526,7 +531,7 @@ export function installDesktopBridge(server: BridgeServer, production = false) {
     if (!wanted) return json(res, { items: [], viewer: false });
     try {
       const file = path.resolve(wanted);
-      if (!/\.(md|markdown)$/i.test(file) || !fs.statSync(file).isFile()) throw new Error('Not a Markdown file');
+      if (!isMarkdownPath(file) || !fs.statSync(file).isFile()) throw new Error('Not a Markdown file');
       json(res, { items: [toItem(file, `document:${file}`)], viewer: true });
     } catch {
       json(res, { items: [], viewer: false, error: 'فایل یافت نشد یا قابل خواندن نیست.' }, 404);

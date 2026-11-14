@@ -1,11 +1,12 @@
 """Markdown discovery shared by conversion and the small desktop reader."""
 from pathlib import Path
 from typing import Iterable
+from .formats import DOCUMENT_EXTENSIONS
 
 
 def normalize_extensions(values: Iterable[str]) -> tuple[str, ...]:
     exts = tuple(dict.fromkeys(f".{v.strip().lstrip('.').lower()}" for v in values if v.strip()))
-    return exts or ('.md', '.markdown')
+    return exts or DOCUMENT_EXTENSIONS
 
 
 def is_markdown_file(path: Path, extensions: Iterable[str]) -> bool:
@@ -23,7 +24,7 @@ def output_for_file(
     output_format: str = 'pdf', target_name: str | None = None,
 ) -> Path:
     target_name = target_name or source.with_suffix(f'.{output_format}').name
-    target_suffixes = {'.pdf', '.docx', '.md', '.markdown'}
+    target_suffixes = {'.pdf', '.docx', *DOCUMENT_EXTENSIONS}
     if output is None:
         return source.parent / target_name
     if input_root is None:
