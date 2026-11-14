@@ -14,3 +14,10 @@ export function copyDocumentPath(path: string): string {
   const dot = path.lastIndexOf('.');
   return isMarkdownPath(path) ? path.slice(0, dot) + '-copy' + path.slice(dot) : path + '-copy.md';
 }
+
+/** Windows uses the first filter extension when a new name omits its suffix. */
+export function saveDocumentExtensions(path: string): string[] {
+  if (!isMarkdownPath(path)) return [...extensions];
+  const current = path.slice(path.lastIndexOf('.') + 1).toLowerCase();
+  return [current, ...extensions.filter(extension => extension !== current)];
+}

@@ -1,4 +1,4 @@
-import { DOCUMENT_EXTENSIONS } from './documentFormats';
+import { saveDocumentExtensions } from './documentFormats';
 import { isTauri } from './tauriBridge';
 
 export interface DocumentSnapshot {
@@ -27,7 +27,7 @@ export const writeDocument = (path: string, text: string, revision: string | nul
 export async function pickSaveMarkdown(defaultPath: string): Promise<string | null> {
   if (isTauri()) {
     const { save } = await import('@tauri-apps/plugin-dialog');
-    return save({ defaultPath, title: 'ذخیره با نام دیگر', filters: [{ name: 'Markdown', extensions: DOCUMENT_EXTENSIONS }] });
+    return save({ defaultPath, title: 'ذخیره با نام دیگر', filters: [{ name: 'Markdown', extensions: saveDocumentExtensions(defaultPath) }] });
   }
   const response = await fetch(`/api/pick-save-file?defaultPath=${encodeURIComponent(defaultPath)}`);
   const result = await response.json();
