@@ -570,6 +570,40 @@ def fix_bidi_list_items(html_content: str) -> str:
     return "".join(result)
 
 
+def fix_bidi_heading_parentheses(html_content: str) -> str:
+    """
+    Ensure Latin parentheticals in RTL headings are isolated with <bdi dir="ltr">
+    so that when the heading wraps across multiple lines in PDF/HTML, the parentheses
+    are not misplaced or inverted by the Unicode Bidirectional Algorithm (UBA).
+    """
+    heading_re = re.compile(
+        r"(<h[1-6]\b[^>]*>)(.*?)(</h[1-6]>)", re.IGNORECASE | re.DOTALL
+    )
+
+    def repl_heading(m: re.Match[str]) -> str:
+        open_tag = m.group(1)
+        inner = m.group(2)
+        close_tag = m.group(3)
+        if re.search(r'\bdir=["\']?ltr["\']?', open_tag, re.IGNORECASE):
+            return m.group(0)
+
+        def repl_paren(pm: re.Match[str]) -> str:
+            full = pm.group(0)
+            content = pm.group(1)
+            if "<bdi" in content or "</bdi>" in content:
+                return full
+            if has_persian(content):
+                return full
+            if not re.search(r"[A-Za-z]", content):
+                return full
+            return f'<bdi dir="ltr">({content})</bdi>'
+
+        fixed_inner = re.sub(r"\(([^()]+)\)", repl_paren, inner)
+        return f"{open_tag}{fixed_inner}{close_tag}"
+
+    return heading_re.sub(repl_heading, html_content)
+
+
 def build_html(markdown_text: str, options: HtmlBuildOptions) -> HtmlDocument:
     if options.strip_emojis:
         markdown_text = strip_emojis(markdown_text)
@@ -584,6 +618,7 @@ def build_html(markdown_text: str, options: HtmlBuildOptions) -> HtmlDocument:
     body_html = _transform_callouts(body_html, strip_emojis_flag=options.strip_emojis)
     body_html = _transform_pagebreaks(body_html)
     body_html = fix_bidi_list_items(body_html)
+    body_html = fix_bidi_heading_parentheses(body_html)
     if options.source_path.suffix.lower() == ".mdx":
         from .mdx import MDX_NOTICE
         body_html = '<blockquote dir="rtl" role="note">' + html.escape(MDX_NOTICE) + '</blockquote>\n' + body_html

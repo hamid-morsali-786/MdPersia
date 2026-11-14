@@ -334,6 +334,22 @@ def _handle_html_block(
         _render_html_images_block(document, raw_html, options)
 
 
+LATIN_PAREN_RE = re.compile(r"(\([^\(\)]*[A-Za-z][^\(\)]*\))")
+
+
+def _split_text_latin_parens(text: str) -> list[tuple[str, bool]]:
+    """Split text into segments with a flag indicating whether it is a Latin parenthetical."""
+    if not LATIN_PAREN_RE.search(text):
+        return [(text, False)]
+    parts: list[tuple[str, bool]] = []
+    for piece in LATIN_PAREN_RE.split(text):
+        if not piece:
+            continue
+        is_lp = bool(LATIN_PAREN_RE.match(piece)) and not has_persian(piece)
+        parts.append((piece, is_lp))
+    return parts or [(text, False)]
+
+
 def _render_inline_tokens(
     paragraph: "Paragraph",
     tokens: list[Token],
@@ -398,6 +414,17 @@ def _render_inline_tokens(
                     italic=italic_stack[-1],
                     rtl=is_rtl,
                 )
+            elif is_rtl and LATIN_PAREN_RE.search(text):
+                for piece, is_lp in _split_text_latin_parens(text):
+                    _add_styled_run(
+                        paragraph,
+                        piece,
+                        font_name=options.font_family,
+                        font_size_pt=base_size,
+                        bold=bold_stack[-1],
+                        italic=italic_stack[-1],
+                        rtl=False if is_lp else has_persian(piece),
+                    )
             else:
                 _add_styled_run(
                     paragraph,

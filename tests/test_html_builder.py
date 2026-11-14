@@ -149,3 +149,34 @@ def test_code_blocks_and_ascii_diagrams_render_pre_dir_ltr():
     assert 'unicode-bidi: normal !important;' in css
     assert 'font-family: Consolas, "Cascadia Mono", "Courier New", "Vazirmatn", monospace;' in css
 
+
+def test_fix_bidi_heading_parentheses_isolates_latin_parentheses():
+    from fa_md_pdf.html_builder import build_html, HtmlBuildOptions
+
+    md_content = """# گزارش پیشرفت پروژه (Hamneshin Progress Report)
+
+## معماری سیستم (System Architecture) و دیتابیس (Oracle RAC)
+
+### گزارش عملکرد (دوره بهار ۱۴۰۵)
+
+# Pure English Heading (Architecture Overview)
+"""
+    html_doc = build_html(md_content, HtmlBuildOptions(source_path=Path("test_headings.md")))
+    html = html_doc.html
+
+    # 1. H1 with Latin parenthetical isolates the parenthetical
+    assert '<h1 id="گزارش-پیشرفت-پروژه-hamneshin-progress-report" dir="rtl">گزارش پیشرفت پروژه <bdi dir="ltr">(Hamneshin Progress Report)</bdi></h1>' in html
+
+    # 2. H2 with multiple Latin parentheticals isolates each
+    assert '<h2 id="معماری-سیستم-system-architecture-و-دیتابیس-oracle-rac" dir="rtl">معماری سیستم <bdi dir="ltr">(System Architecture)</bdi> و دیتابیس <bdi dir="ltr">(Oracle RAC)</bdi></h2>' in html
+
+    # 3. Persian parenthetical is left intact without bdi
+    assert '<h3 id="گزارش-عملکرد-دوره-بهار-۱۴۰۵" dir="rtl">گزارش عملکرد (دوره بهار ۱۴۰۵)</h3>' in html
+
+    # 4. Pure English heading is left intact
+    assert '<h1 id="pure-english-heading-architecture-overview" dir="ltr">Pure English Heading (Architecture Overview)</h1>' in html
+
+    # 5. Document title extracted cleanly without raw HTML tags
+    assert "Hamneshin Progress Report" in html_doc.title
+
+

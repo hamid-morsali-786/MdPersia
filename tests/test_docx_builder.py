@@ -283,3 +283,31 @@ def greet(name: str) -> str:
         assert rtl[0].get("{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val") == "0"  # <w:rtl w:val="0"/>
 
 
+def test_docx_heading_latin_parentheses_split_runs(tmp_path: Path) -> None:
+    md_content = """# گزارش پیشرفت پروژه سیستم مدیریت (Hamneshin Progress Report and Architecture Overview) برای تیم توسعه
+"""
+    input_file = tmp_path / "h1_test.md"
+    input_file.write_text(md_content, encoding="utf-8")
+    output_file = tmp_path / "h1_test.docx"
+
+    options = DocxBuildOptions(source_path=input_file)
+    build_docx(md_content, options, output_file)
+
+    assert output_file.is_file()
+    doc = docx.Document(output_file)
+
+    h1_p = doc.paragraphs[0]
+    # Should have split into at least 3 runs: Persian before, Latin paren, Persian after
+    assert len(h1_p.runs) >= 3
+
+    paren_runs = [r for r in h1_p.runs if "(Hamneshin" in r.text]
+    assert len(paren_runs) == 1
+    paren_run = paren_runs[0]
+
+    # Latin parenthetical must have w:rtl val="0" (LTR run)
+    rtl_nodes = paren_run._r.xpath(".//w:rtl")
+    assert len(rtl_nodes) > 0
+    assert rtl_nodes[0].get("{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val") == "0"
+
+
+
