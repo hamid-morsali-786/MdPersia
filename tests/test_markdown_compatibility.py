@@ -31,6 +31,21 @@ def test_literal_title_and_page_break_in_examples():
     assert doc.title == "Actual title"
     assert '<div class="page-break"></div>' not in doc.html
 
+
+def test_link_destinations_and_tilde_fences_do_not_change_persian_direction():
+    result = render('# [راهنما](./long-english-destination-that-is-not-visible.md)\n\n'
+                    '~~~text\n' + 'english source code ' * 20 + '\n~~~').html
+    assert '<html lang="fa" dir="rtl">' in result
+    assert '<h1 id="راهنما" dir="rtl">' in result
+    assert 'long-english-destination-that-is-not-visible.md' in result
+
+
+def test_loose_list_isolates_text_inside_each_paragraph():
+    result = render('- First paragraph\n\n  Second paragraph').html
+    assert '<bdi><p>' not in result
+    assert '<p><bdi>First paragraph</bdi></p>' in result
+    assert '<p><bdi>Second paragraph</bdi></p>' in result
+
 def test_unicode_windows_sources_round_trip_without_losing_byte_order(tmp_path):
     from fa_md_pdf.document_io import read_document, save_document
     from fa_md_pdf.html_builder import read_text_safely

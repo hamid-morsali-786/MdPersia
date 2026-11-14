@@ -24,51 +24,9 @@ body {
   max-width: 100%;
 }
 
-p,
-li,
-blockquote,
-td,
-th,
-figcaption {
-  unicode-bidi: isolate;
-}
-
-html[dir="rtl"] body {
-  direction: rtl;
-  text-align: right;
-}
-
-html[dir="ltr"] body {
-  direction: ltr;
-  text-align: left;
-}
-
-/* Direction-aware prose blocks:
-   Avoid unicode-bidi: plaintext on block elements, as plaintext classifies
-   any Persian sentence that opens with a Latin term/keyword as LTR!
-*/
-html[dir="rtl"] :is(p, li, dd, dt, blockquote, h1, h2, h3, h4, h5, h6, th, td, figcaption) {
-  direction: rtl;
-  text-align: right;
-  unicode-bidi: isolate;
-}
-
-html[dir="ltr"] :is(p, li, dd, dt, blockquote, h1, h2, h3, h4, h5, h6, th, td, figcaption) {
-  direction: ltr;
-  text-align: left;
-  unicode-bidi: isolate;
-}
-
-/* Explicit direction overrides for bilingual mixed documents */
-:is([dir="ltr"]:not(html, body), [dir="ltr"]:not(html, body) :is(p, li, dd, dt, blockquote, h1, h2, h3, h4, h5, h6, th, td)) {
-  direction: ltr !important;
-  text-align: left !important;
-  unicode-bidi: isolate;
-}
-
-:is([dir="rtl"]:not(html, body), [dir="rtl"]:not(html, body) :is(p, li, dd, dt, blockquote, h1, h2, h3, h4, h5, h6, th, td)) {
-  direction: rtl !important;
-  text-align: right !important;
+/* Let prose inherit alignment from its container. The body's logical start
+   still follows each block's direction when the document sets no alignment. */
+:is(p, li, dd, dt, blockquote, h1, h2, h3, h4, h5, h6, th, td, figcaption) {
   unicode-bidi: isolate;
 }
 
@@ -126,20 +84,6 @@ ol {
   padding-inline-end: 0;
 }
 
-ul[dir="rtl"],
-ol[dir="rtl"] {
-  padding-inline-start: 1.6em !important;
-  padding-inline-end: 0 !important;
-  direction: rtl !important;
-}
-
-ul[dir="ltr"],
-ol[dir="ltr"] {
-  padding-inline-start: 1.6em !important;
-  padding-inline-end: 0 !important;
-  direction: ltr !important;
-}
-
 table {
   width: 100%;
   border-collapse: collapse;
@@ -159,6 +103,7 @@ th,
 td {
   border: 1px solid #d1d5db;
   padding: 0.45em 0.6em;
+  text-align: start;
   vertical-align: top;
 }
 

@@ -30,6 +30,16 @@ def test_noop_save_keeps_mixed_newlines_byte_for_byte(tmp_path):
     assert source.read_bytes() == original
 
 
+def test_malformed_utf8_with_bom_is_not_reinterpreted_as_legacy_text(tmp_path):
+    source = tmp_path / "invalid.md"
+    original = b"\xef\xbb\xbf# text\xff"
+    source.write_bytes(original)
+    with pytest.raises(DocumentError) as error:
+        read_document(str(source))
+    assert error.value.code == "ENCODING"
+    assert source.read_bytes() == original
+
+
 def test_conflict_never_overwrites_external_edit_or_deleted_file(tmp_path):
     source = tmp_path / "conflict.md"
     source.write_text("# Original", encoding="utf-8")

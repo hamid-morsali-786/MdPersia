@@ -42,6 +42,14 @@ def test_roots_matrices_and_limits(tmp_path):
     assert "∑" in operators and "∫" in operators
 
 
+def test_word_preserves_alignment_of_multiline_equations(tmp_path):
+    _, xml, _ = export(tmp_path, r"$$\begin{aligned}x&=1\\xyz&=123\end{aligned}$$")
+    matrix = xml.find(".//m:m", NS)
+    assert len(matrix.findall("m:mr", NS)) == 2
+    assert [item.get("{" + NS["m"] + "}val")
+            for item in matrix.findall("m:mPr/m:mcs/m:mc/m:mcPr/m:mcJc", NS)] == ["right", "left"]
+
+
 def test_invalid_math_preserves_source_and_following_text(tmp_path, caplog):
     path, _, _ = export(tmp_path, "$$\n\\frac{\n$$\n\nپایان")
     text = "\n".join(p.text for p in Document(path).paragraphs)

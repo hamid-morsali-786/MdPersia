@@ -1,5 +1,5 @@
 from __future__ import annotations
-from .rtl_wrapper import classify_block_direction, detect_direction, has_persian
+from .rtl_wrapper import classify_block_direction, detect_direction, has_persian, inline_prose, split_latin_field
 
 import html
 import json
@@ -12,6 +12,7 @@ from typing import Final
 from mdit_py_plugins.footnote import footnote_plugin
 from mdit_py_plugins.tasklists import tasklists_plugin
 from markdown_it import MarkdownIt
+from markdown_it.token import Token
 from .math_renderer import math_plugin
 
 DEFAULT_MERMAID_CDN: Final[str] = "https://cdn.jsdelivr.net/npm/mermaid@11.15.0/dist/mermaid.min.js"
@@ -144,26 +145,35 @@ def _bidi_plugin(md: MarkdownIt) -> None:
     """
     def rule(state):
         tokens = state.tokens
+        prose = " ".join(inline_prose(token.children or []) for token in tokens if token.type == "inline")
+        if prose.strip():
+            state.env["document_direction"] = detect_direction(prose)
+        lists: list[Token] = []
         i = 0
         while i < len(tokens):
             token = tokens[i]
+            if token.type in ("bullet_list_close", "ordered_list_close"):
+                lists.pop()
 
             # 1. Headings
             if token.type == "heading_open":
                 if i + 1 < len(tokens) and tokens[i + 1].type == "inline":
-                    token.attrSet("dir", classify_block_direction(tokens[i + 1].content))
+                    token.attrSet("dir", classify_block_direction(inline_prose(tokens[i + 1].children or [])))
 
             # 2. Paragraphs (not nested inside lists to keep list items uniform)
             elif token.type == "paragraph_open":
-                in_list = False
-                for prev in reversed(tokens[:i]):
-                    if prev.type in ("bullet_list_open", "ordered_list_open"):
-                        in_list = True
-                        break
-                    elif prev.type in ("bullet_list_close", "ordered_list_close"):
-                        break
-                if not in_list and i + 1 < len(tokens) and tokens[i + 1].type == "inline":
-                    token.attrSet("dir", classify_block_direction(tokens[i + 1].content))
+                if i + 1 < len(tokens) and tokens[i + 1].type == "inline":
+                    inline = tokens[i + 1]
+                    if not lists:
+                        token.attrSet("dir", classify_block_direction(inline_prose(inline.children or [])))
+                    elif lists[-1].attrGet("dir") == "rtl" and token.level == lists[-1].level + 2:
+                        field = split_latin_field(inline.children or [])
+                        if field:
+                            label, value = field
+                            inline.meta["rtl_field"] = True
+                            inline.children = [Token("field_label_open", "bdi", 1), *label,
+                                               Token("field_separator", "", 0), *value,
+                                               Token("field_value_close", "bdi", -1)]
 
             # 3. Lists (ul / ol)
             elif token.type in ("bullet_list_open", "ordered_list_open"):
@@ -179,8 +189,9 @@ def _bidi_plugin(md: MarkdownIt) -> None:
                             break
                     list_tokens.append(tokens[j])
                     j += 1
-                all_text = " ".join(t.content for t in list_tokens if t.type == "inline")
+                all_text = " ".join(inline_prose(t.children or []) for t in list_tokens if t.type == "inline")
                 token.attrSet("dir", classify_block_direction(all_text))
+                lists.append(token)
 
             # 4. Tables
             elif token.type == "table_open":
@@ -196,7 +207,7 @@ def _bidi_plugin(md: MarkdownIt) -> None:
                             break
                     table_tokens.append(tokens[j])
                     j += 1
-                all_text = " ".join(t.content for t in table_tokens if t.type == "inline")
+                all_text = " ".join(inline_prose(t.children or []) for t in table_tokens if t.type == "inline")
                 token.attrSet("dir", classify_block_direction(all_text))
 
             # 5. Blockquotes
@@ -213,7 +224,7 @@ def _bidi_plugin(md: MarkdownIt) -> None:
                             break
                     bq_tokens.append(tokens[j])
                     j += 1
-                all_text = " ".join(t.content for t in bq_tokens if t.type == "inline")
+                all_text = " ".join(inline_prose(t.children or []) for t in bq_tokens if t.type == "inline")
                 token.attrSet("dir", classify_block_direction(all_text))
 
             # 6. Code blocks / fences (always LTR)
@@ -235,6 +246,11 @@ def build_markdown_renderer() -> MarkdownIt:
     renderer.enable("strikethrough")
     renderer.use(footnote_plugin)
     renderer.use(tasklists_plugin)
+    renderer.renderer.rules.update({
+        "field_label_open": lambda *_: '<bdi dir="ltr">',
+        "field_separator": lambda *_: '</bdi> <bdi dir="auto">',
+        "field_value_close": lambda *_: '</bdi>',
+    })
     original_fence = renderer.renderer.rules["fence"]
 
     def fence(tokens, index, options, env):
@@ -475,6 +491,14 @@ def _fix_li_inner(content: str) -> str:
     inner = content.strip()
     if not inner:
         return content
+    if inner.startswith('<bdi dir="ltr">'):
+        return content  # The token renderer already isolated both parts of this field.
+
+    # Loose list items contain blocks; bdi may only wrap phrasing content.
+    if re.search(r"<(?:p|pre|div|blockquote|table|h[1-6]|hr|section|figure)\b", inner, re.I):
+        return re.sub(r"(<p\b[^>]*>)(.*?)(</p>)",
+                      lambda m: m[1] + _fix_li_inner(m[2]) + m[3],
+                      content, flags=re.I | re.S)
 
     if not has_persian(inner):
         return f"{lead_ws}<bdi>{inner}</bdi>{trail_ws}"
@@ -553,7 +577,7 @@ def build_html(markdown_text: str, options: HtmlBuildOptions) -> HtmlDocument:
         mermaid_script = mermaid_script.replace("<script", f'<script nonce="{nonce}"')
         preview_policy = f'''<meta http-equiv="Content-Security-Policy" content="script-src 'nonce-{nonce}'; object-src 'none'; frame-src 'none'; form-action 'none'">'''
 
-    doc_dir = detect_direction(markdown_text)
+    doc_dir = env.get("document_direction") or detect_direction(markdown_text)
     doc_lang = "fa" if doc_dir == "rtl" else "en"
 
     document = f"""<!doctype html>
