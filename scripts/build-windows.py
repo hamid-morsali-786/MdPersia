@@ -65,8 +65,11 @@ def main() -> None:
                 target = licenses / package / relative
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(dist.locate_file(file), target)
+    pw_env = {**os.environ, 'PLAYWRIGHT_BROWSERS_PATH': str(browser_cache)}
+    if 'PLAYWRIGHT_NODEJS_PATH' not in pw_env and shutil.which('node'):
+        pw_env['PLAYWRIGHT_NODEJS_PATH'] = shutil.which('node')
     run(sys.executable, '-m', 'playwright', 'install', '--only-shell', 'chromium',
-        env={**os.environ, 'PLAYWRIGHT_BROWSERS_PATH': str(browser_cache)})
+        env=pw_env)
     shutil.copytree(browser_cache, STAGING / 'browsers', ignore=shutil.ignore_patterns('.links'))
     # The driver Node binary is private to Playwright; no global Node is used.
     notices = ['MdPersia: MIT (assets/LICENSE).',

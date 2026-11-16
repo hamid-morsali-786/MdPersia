@@ -115,3 +115,19 @@ def set_playwright_browsers_path(path: Path | None, *, force: bool = False) -> P
 
 def find_preferred_font_file(fonts_dir: Path) -> Path | None:
     return next((p.resolve() for name in PREFERRED_FONT_FILES if (p := fonts_dir / name).is_file()), None)
+
+
+def ensure_playwright_node_path() -> str | None:
+    """Set PLAYWRIGHT_NODEJS_PATH to system Node when bundled driver node is missing."""
+    import shutil
+
+    current = os.environ.get("PLAYWRIGHT_NODEJS_PATH")
+    if current and Path(current).is_file():
+        return current
+    roots = (os.environ.get("PROGRAMFILES"), os.environ.get("PROGRAMFILES(X86)"), os.environ.get("NVM_SYMLINK"))
+    candidates = [Path(r) / ("node.exe" if r == os.environ.get("NVM_SYMLINK") else "nodejs/node.exe") for r in roots if r]
+    node = shutil.which("node") or next((str(p) for p in candidates if p.is_file()), None)
+    if node:
+        os.environ["PLAYWRIGHT_NODEJS_PATH"] = node
+    return node
+

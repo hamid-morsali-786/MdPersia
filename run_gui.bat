@@ -9,6 +9,14 @@ echo ====================================================
 echo Launching GUI...
 
 set "PYTHONPATH=%~dp0src;%PYTHONPATH%"
+if exist "%~dp0.venv\Lib\site-packages\playwright\driver\node.exe" (
+    set "PATH=%~dp0.venv\Lib\site-packages\playwright\driver;%PATH%"
+)
+if "%~1"=="" (
+    for /f "tokens=5" %%a in ('netstat -aon ^| findstr /R /C:":1420 .*LISTENING"') do (
+        taskkill /F /PID %%a /T >nul 2>&1
+    )
+)
 
 if exist ".venv\Scripts\python.exe" (
     ".venv\Scripts\python.exe" -m mdpersia --gui %*

@@ -66,7 +66,6 @@ type Picker = 'files' | 'folder' | 'save';
 function pickerScript(kind: Picker, title: string, filter: string, defaultPath = ''): string {
   const defaultExtension = isMarkdownPath(defaultPath) ? path.extname(defaultPath).slice(1) : 'md';
   const safe = title.replace(/'/g, "''");
-  // FolderBrowserDialog only has Description; OpenFileDialog only has Title.
   const dialog =
     kind === 'folder'
       ? `$d = New-Object System.Windows.Forms.FolderBrowserDialog
@@ -87,23 +86,25 @@ $d.Filter = '${filter.replace(/'/g, "''")}'`;
     'Add-Type -AssemblyName System.Windows.Forms | Out-Null',
     '$owner = New-Object System.Windows.Forms.Form',
     '$owner.TopMost = $true',
-    '$owner.Width = 0',
-    '$owner.Height = 0',
+    '$owner.Width = 1',
+    '$owner.Height = 1',
     '$owner.Opacity = 0',
     '$owner.ShowInTaskbar = $false',
-    '$owner.StartPosition = [System.Windows.Forms.FormStartPosition]::CenterScreen',
+    "$owner.FormBorderStyle = 'None'",
+    "$owner.StartPosition = 'CenterScreen'",
+    '$owner.Show()',
+    '$owner.BringToFront()',
+    '$owner.Activate()',
+    '[System.Windows.Forms.Application]::DoEvents()',
     'try {',
-    '  $owner.Show()',
-    '  $owner.Activate()',
-    '  $owner.BringToFront()',
     dialog,
     '  $r = $d.ShowDialog($owner)',
     `  if ($r -eq [System.Windows.Forms.DialogResult]::OK) { ${result} } else { [Console]::Out.Write('{"ok":false,"cancelled":true}') }`,
     '} catch {',
     `  [Console]::Out.Write((ConvertTo-Json -Compress @{ ok = $false; error = $_.Exception.Message }))`,
     '} finally {',
-    '  if ($owner -ne $null) { $owner.Dispose() }',
-    '  [System.Windows.Forms.Application]::ExitThread()',
+    '  if ($d -ne $null) { $d.Dispose() }',
+    '  if ($owner -ne $null) { $owner.Close(); $owner.Dispose() }',
     '}',
   ].join('\n');
 }
@@ -116,6 +117,8 @@ function failReason(err: Error): string {
   return first.length > 200 ? first.slice(0, 200) : first;
 }
 
+let activePickerChild: import('node:child_process').ChildProcess | null = null;
+
 function runPicker(
   kind: Picker,
   title: string,
@@ -123,12 +126,18 @@ function runPicker(
   done: (r: PickerResult) => void,
   defaultPath = ''
 ): void {
+  if (activePickerChild && !activePickerChild.killed) {
+    try { activePickerChild.kill(); } catch {}
+    activePickerChild = null;
+  }
+
   const encoded = Buffer.from(pickerScript(kind, title, filter, defaultPath), 'utf16le').toString('base64');
-  execFile(
+  const cp = execFile(
     'powershell.exe',
-    ['-NoProfile', '-NonInteractive', '-STA', '-WindowStyle', 'Hidden', '-EncodedCommand', encoded],
-    { windowsVerbatimArguments: true, maxBuffer: 8 * 1024 * 1024 },
+    ['-NoProfile', '-STA', '-EncodedCommand', encoded],
+    { windowsHide: true, maxBuffer: 8 * 1024 * 1024 },
     (err, stdout) => {
+      activePickerChild = null;
       if (err && !(stdout || '').trim()) {
         done({ error: failReason(err) });
         return;
@@ -140,6 +149,16 @@ function runPicker(
       }
     }
   );
+  activePickerChild = cp;
+
+  const timer = setTimeout(() => {
+    if (activePickerChild === cp) {
+      try { cp.kill(); } catch {}
+      activePickerChild = null;
+      done({ cancelled: true, error: 'Picker timed out' });
+    }
+  }, 120000);
+  timer.unref();
 }
 
 function openInExplorerNative(rawPath: string, done: (err?: string) => void): void {
@@ -189,7 +208,8 @@ function openInExplorerNative(rawPath: string, done: (err?: string) => void): vo
   const encoded = Buffer.from(script, 'utf16le').toString('base64');
   execFile(
     'powershell.exe',
-    ['-NoProfile', '-NonInteractive', '-STA', '-WindowStyle', 'Hidden', '-EncodedCommand', encoded],
+    ['-NoProfile', '-NonInteractive', '-STA', '-EncodedCommand', encoded],
+    { windowsHide: true },
     (err) => {
       done(err ? failReason(err) : undefined);
     }
@@ -261,6 +281,7 @@ export function installDesktopBridge(server: BridgeServer, production = false) {
       (process.env.PYTHONPATH ? path.delimiter + process.env.PYTHONPATH : ''),
     PYTHONIOENCODING: 'utf-8',
     PYTHONUTF8: '1',
+    PLAYWRIGHT_NODEJS_PATH: process.env.PLAYWRIGHT_NODEJS_PATH || process.execPath,
   });
 
   // The same native bridge serves both the development UI and its production build.
@@ -287,7 +308,7 @@ export function installDesktopBridge(server: BridgeServer, production = false) {
       if (windows.size) return;
       // A continuous watch belongs to its application window, not an invisible daemon.
       for (const job of watchJobs) void stopJob(job).catch(() => {});
-      if (conversions.size) return idleShutdown();
+      if (conversions.size || activePickerChild) return idleShutdown();
       process.exit(0);
     }, delay);
     shutdownTimer.unref();

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.1] - 2026-11-15
+
+### Fixed
+- **Mermaid Batch Rendering on Windows:** Automatically detect system Node.js binary (`node.exe`) for Playwright driver during batch DOCX generation.
+- **Large Diagram Texture Limits:** Clamped extreme Mermaid SVG viewport dimensions to bypass Chromium screenshot buffer limits on massive diagrams.
+- **Folder Picker Dialog Focus:** Brought native folder browser dialogs to the foreground (`TopMost`) to prevent them from opening hidden behind the main window.
+- **BiDi Heading Typography:** Resolved misplaced Latin parentheses in multi-line RTL headings across HTML and DOCX generators (Issue #6).
+
 ## [0.3.0] - 2026-11-05
 
 ### Added

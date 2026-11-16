@@ -297,6 +297,9 @@ def convert_jobs(
         return results
 
     # PDF conversion uses Playwright browser session
+    from .defaults import ensure_playwright_node_path
+
+    ensure_playwright_node_path()
     with tempfile.TemporaryDirectory(prefix="fa-md-pdf-") as tmp:
         temp_dir = Path(tmp)
 

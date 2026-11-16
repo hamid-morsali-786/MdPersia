@@ -11,6 +11,7 @@ from pathlib import Path
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import sync_playwright
 
+from .defaults import ensure_playwright_node_path
 from .html_builder import to_mermaid_source
 
 MERMAID_PAGE_TEMPLATE = """<!doctype html>
@@ -18,16 +19,17 @@ MERMAID_PAGE_TEMPLATE = """<!doctype html>
 <head>
 <meta charset="utf-8">
 <style>
-  body {{ margin: 0; padding: 40px; background: white; }}
+  body {{ margin: 0; padding: 24px; background: white; }}
   .mermaid {{
     display: block;
     font-size: 18px;
-    min-width: 600px;
+    background: white;
   }}
   .mermaid svg {{
-    width: 100%;
+    display: block;
+    max-width: 100%;
     height: auto;
-    min-width: 600px;
+    background: white;
   }}
 </style>
 </head>
@@ -52,6 +54,47 @@ window.__ERROR = null;
 </body>
 </html>
 """
+
+MAX_SCREENSHOT_PHYS_PX = 12_000
+FALLBACK_SCREENSHOT_PHYS_PX = 4_096
+
+
+def _clamp_svg_for_screenshot(page, scale_factor: int, max_phys_px: int) -> None:
+    """Clamp rendered SVG size so physical dimensions stay within Chromium texture limits."""
+    max_css = max(256, int(max_phys_px // max(1, scale_factor)))
+    page.evaluate(
+        """(maxCss) => {
+            const pre = document.querySelector('.mermaid');
+            const svg = document.querySelector('.mermaid svg');
+            if (!pre || !svg) return;
+            const rect = svg.getBoundingClientRect();
+            const vb = svg.viewBox && svg.viewBox.baseVal;
+            const rawW = rect.width >= 1 ? rect.width : (vb && vb.width > 0 ? vb.width : 800);
+            const rawH = rect.height >= 1 ? rect.height : (vb && vb.height > 0 ? vb.height : 600);
+            if (!svg.getAttribute('viewBox')) svg.setAttribute('viewBox', `0 0 ${rawW} ${rawH}`);
+            const ratio = Math.min(1, maxCss / Math.max(rawW, rawH, 1));
+            const w = Math.max(1, Math.floor(rawW * ratio));
+            const h = Math.max(1, Math.floor(rawH * ratio));
+            svg.style.width = `${w}px`;
+            svg.style.maxWidth = `${w}px`;
+            svg.style.minWidth = '0px';
+            svg.style.height = `${h}px`;
+            pre.style.display = 'inline-block';
+            pre.style.width = `${w}px`;
+        }""",
+        max_css,
+    )
+
+
+def _capture_mermaid_png(page, target_el, png_path: Path, scale_factor: int) -> None:
+    """Capture Mermaid element screenshot with fallback clamping if texture limits are hit."""
+    _clamp_svg_for_screenshot(page, scale_factor, MAX_SCREENSHOT_PHYS_PX)
+    try:
+        target_el.screenshot(path=str(png_path), omit_background=False)
+    except Exception:
+        _clamp_svg_for_screenshot(page, scale_factor, FALLBACK_SCREENSHOT_PHYS_PX)
+        target_el.screenshot(path=str(png_path), omit_background=False)
+
 
 
 def render_mermaid_to_png(
@@ -87,6 +130,7 @@ def render_mermaid_to_png(
     temp_dir = Path(tempfile.mkdtemp(prefix="fa-md-pdf-mermaid-"))
     result: dict[str, Path] = {}
 
+    ensure_playwright_node_path()
     with sync_playwright() as playwright:
         def _launch_browser(pw):
             if os.environ.get('MDPERSIA_BUNDLED_ENGINE') == '1':
@@ -144,8 +188,8 @@ def render_mermaid_to_png(
                             raise RuntimeError(f"Mermaid render error: {error}")
                         continue
 
-                    # Locate the rendered diagram container
-                    mermaid_el = page.query_selector(".mermaid")
+                    # Locate the rendered diagram SVG (or container fallback)
+                    mermaid_el = page.query_selector(".mermaid svg") or page.query_selector(".mermaid")
                     if mermaid_el is None:
                         if ignore_errors:
                             continue
@@ -157,7 +201,7 @@ def render_mermaid_to_png(
                     page.wait_for_timeout(200)
 
                     png_path = temp_dir / f"mermaid_{idx}.png"
-                    mermaid_el.screenshot(path=str(png_path), omit_background=False)
+                    _capture_mermaid_png(page, mermaid_el, png_path, device_scale_factor)
                     result[code] = png_path
                 finally:
                     page.close()

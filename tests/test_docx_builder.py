@@ -310,4 +310,38 @@ def test_docx_heading_latin_parentheses_split_runs(tmp_path: Path) -> None:
     assert rtl_nodes[0].get("{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val") == "0"
 
 
+def test_capture_mermaid_png_clamps_and_retries_on_texture_limit(tmp_path: Path) -> None:
+    from fa_md_pdf.mermaid_renderer import (
+        FALLBACK_SCREENSHOT_PHYS_PX,
+        MAX_SCREENSHOT_PHYS_PX,
+        _capture_mermaid_png,
+    )
+
+    evaluated_limits: list[int] = []
+    screenshot_attempts = 0
+
+    class DummyPage:
+        def evaluate(self, _script: str, max_css: int) -> None:
+            evaluated_limits.append(max_css)
+
+    class DummyElement:
+        def screenshot(self, *, path: str, omit_background: bool) -> None:
+            nonlocal screenshot_attempts
+            screenshot_attempts += 1
+            if screenshot_attempts == 1:
+                raise RuntimeError("Protocol error (Page.captureScreenshot): Unable to capture screenshot")
+            Path(path).write_bytes(b"png")
+
+    png_path = tmp_path / "mermaid_0.png"
+    _capture_mermaid_png(DummyPage(), DummyElement(), png_path, scale_factor=4)
+
+    assert screenshot_attempts == 2
+    assert evaluated_limits == [
+        MAX_SCREENSHOT_PHYS_PX // 4,
+        FALLBACK_SCREENSHOT_PHYS_PX // 4,
+    ]
+    assert png_path.is_file()
+
+
+
 

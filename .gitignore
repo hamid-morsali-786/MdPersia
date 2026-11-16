@@ -44,3 +44,7 @@ release-assets/
 # Coverage & testing
 .coverage
 htmlcov/
+
+# Local scratch and helper scripts
+scratch/
+release_*.bat

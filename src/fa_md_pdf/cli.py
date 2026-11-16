@@ -687,11 +687,16 @@ def _run_gui(args: argparse.Namespace) -> int:
             return 0
 
         print("[fa-md-pdf] Launching MdPersia desktop...")
-        import shutil
+        from .defaults import ensure_playwright_node_path
 
-        node = shutil.which("node")
+        node = ensure_playwright_node_path()
+        if not node:
+            pw_node = project_root / ".venv" / "Lib" / "site-packages" / "playwright" / "driver" / ("node.exe" if sys.platform == "win32" else "node")
+            if pw_node.is_file():
+                node = str(pw_node)
+        built = _frontend_build_current(tauri_dir)
         vite_cli = tauri_dir / "node_modules" / "vite" / "bin" / "vite.js"
-        if not node or not vite_cli.is_file():
+        if not node or (not built and not vite_cli.is_file()):
             print("Error: Node.js or the desktop dependencies are missing. Run npm install in desktop-tauri.", file=sys.stderr)
             return 1
 
@@ -701,7 +706,6 @@ def _run_gui(args: argparse.Namespace) -> int:
         env.setdefault("PYTHON_EXECUTABLE", sys.executable)
         env.pop("MDPERSIA_INITIAL_FILE", None)
 
-        built = _frontend_build_current(tauri_dir)
         cmd = [node, str(tauri_dir / "dist" / "desktop-server.mjs")] if built else [node, str(vite_cli)]
         cmd += ["--port", str(GUI_PORT), "--host", "127.0.0.1", "--strictPort"]
         proc = subprocess.Popen(

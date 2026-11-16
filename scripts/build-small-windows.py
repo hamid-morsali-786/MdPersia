@@ -44,7 +44,7 @@ def main() -> None:
     shutil.copytree(FULL / 'assets', STAGING / 'assets')
     shutil.copy2(FULL / 'THIRD_PARTY_NOTICES.txt', STAGING)
     browser = next((FULL / 'browsers').glob('chromium_headless_shell-*/chrome-headless-shell-win64/chrome-headless-shell.exe'))
-    repository = os.environ.get('GITHUB_REPOSITORY', 'Pezhm4n/MdPersia')
+    repository = os.environ.get('GITHUB_REPOSITORY', 'hamid-morsali-786/MdPersia')
     catalog = {'version': version, 'sha256': digest, 'bytes': package.stat().st_size,
         'filename': filename, 'engineVersion': version.replace('-beta.', 'b'),
         'browserExecutable': browser.relative_to(FULL).as_posix(),
