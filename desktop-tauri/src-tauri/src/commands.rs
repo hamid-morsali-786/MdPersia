@@ -211,6 +211,10 @@ pub async fn open_external(url: String) -> Result<(), String> {
 #[tauri::command]
 pub async fn reveal_path(target_path: String) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
+        // FileInfo paths use forward slashes, which ILCreateFromPathW does not accept.
+        #[cfg(windows)]
+        let path = PathBuf::from(target_path.replace('/', "\\"));
+        #[cfg(not(windows))]
         let path = PathBuf::from(target_path);
         if !path.exists() { return Err("مسیر انتخاب‌شده پیدا نشد.".into()); }
         #[cfg(windows)]
