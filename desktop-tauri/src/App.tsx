@@ -17,7 +17,7 @@ import {
   isTauri,
 } from './services/tauriBridge';
 import { listenForHandoffs } from './services/singleInstance';
-import { documentKey, mergeQueueItems, removeQueueItems } from './services/queueState';
+import { documentKey, filterQueueItems, mergeQueueItems, removeQueueItems } from './services/queueState';
 import { DEFAULT_APP_SETTINGS, readPreferences, savePreferences, type AppSettings } from './services/appSettings';
 import { draftIsDirty, useDocumentEditor } from './services/useDocumentEditor';
 import type { DocumentSnapshot } from './services/documents';
@@ -474,7 +474,7 @@ export const App: React.FC = () => {
     setActiveItemId(id);
     setWorkspaceTab('preview');
     if (e.shiftKey && selectionAnchor.current) {
-      const visible = items.filter(item => !query.trim() || `${item.name} ${item.relativePath || ''}`.toLowerCase().includes(query.trim().toLowerCase()));
+      const visible = filterQueueItems(items, query);
       const anchor = visible.findIndex(item => item.id === selectionAnchor.current);
       const target = visible.findIndex(item => item.id === id);
       if (anchor >= 0 && target >= 0) {

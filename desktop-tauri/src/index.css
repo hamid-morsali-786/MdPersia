@@ -110,6 +110,19 @@
 .border-subtle { border-color: var(--border-subtle); }
 .text-main { color: var(--text-main); }
 .text-muted { color: var(--text-muted); }
+
+.queue-scroll { overscroll-behavior: contain; }
+.queue-file-name {
+  inline-size: fit-content;
+  max-inline-size: 100%;
+  overflow-wrap: anywhere;
+  text-align: start;
+  unicode-bidi: isolate;
+}
+/* The filename ends on the right while its stem keeps its own reading direction. */
+.queue-file-name:has(> bdi:dir(rtl)) { text-align: right; }
+.queue-file-extension { white-space: nowrap; }
+.queue-file-name > bdi:dir(rtl) + .queue-file-extension { margin-inline-start: 2px; }
 .text-dim { color: var(--text-dim); }
 .bg-input { background-color: var(--input-bg); }
 .border-input { border-color: var(--input-border); }
