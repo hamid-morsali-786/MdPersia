@@ -39,6 +39,7 @@ interface QueuePanelProps {
   onPickFilesNative?: () => void;
   onAddFolder?: () => void;
   onRemoveSelected: () => void;
+  onCloseDocument: (id: string) => void;
   onClearAll: () => void;
   onOpenFile?: (path: string) => void;
   onRevealFolder?: (path: string) => void;
@@ -58,6 +59,7 @@ export const QueuePanel: React.FC<QueuePanelProps> = ({
   onPickFilesNative,
   onAddFolder,
   onRemoveSelected,
+  onCloseDocument,
   onClearAll,
   onOpenFile,
   onRevealFolder,
@@ -66,6 +68,8 @@ export const QueuePanel: React.FC<QueuePanelProps> = ({
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; item: QueueItem } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const tableRef = useRef<HTMLTableElement>(null);
+  const closeFocus = useRef<{ id: string; index: number } | null>(null);
 
   const { visibleColumns, toggleColumn, resetVisibility } = useColumnVisibility();
   const { columnWidths, resizingCol, startResize, resetColumnWidth, resetAllWidths } = useColumnResize();
@@ -122,6 +126,15 @@ export const QueuePanel: React.FC<QueuePanelProps> = ({
   }, [contextMenu]);
 
   const trimmed = query.trim();
+  useEffect(() => {
+    if (!closeFocus.current || items.some(item => item.id === closeFocus.current?.id)) return;
+    const { index } = closeFocus.current;
+    closeFocus.current = null;
+    if (document.activeElement !== document.body) return;
+    const rows = tableRef.current?.querySelectorAll<HTMLElement>('tbody tr');
+    const next = rows?.[Math.min(index, rows.length - 1)] ?? searchRef.current;
+    next?.focus({ preventScroll: true });
+  }, [items]);
   const filtered = useMemo(() => {
     if (!trimmed) return items;
     const needle = trimmed.toLowerCase();
@@ -213,7 +226,7 @@ export const QueuePanel: React.FC<QueuePanelProps> = ({
       {/* Main Table / Drop Area */}
       <div className="flex-1 overflow-x-auto overflow-y-auto relative" onKeyDown={(event) => {
         const row = (event.target as HTMLElement).closest<HTMLElement>('[data-document-id]');
-        if (!row) return;
+        if (!row || event.target !== row) return;
         const index = filtered.findIndex(item => item.id === row.dataset.documentId);
         let next = index;
         if (event.key === 'ArrowDown') next = Math.min(filtered.length - 1, index + 1);
@@ -251,7 +264,7 @@ export const QueuePanel: React.FC<QueuePanelProps> = ({
             </button>
           </div>
         ) : (
-          <table className="w-full text-right text-xs table-fixed">
+          <table ref={tableRef} className="w-full text-right text-xs table-fixed">
             <thead className="sticky top-0 bg-surface backdrop-blur border-b border-main text-muted z-10">
               <tr>
                 {visibleColDefs.map((col) => (
@@ -268,7 +281,7 @@ export const QueuePanel: React.FC<QueuePanelProps> = ({
               </tr>
             </thead>
             <tbody>
-              {filtered.map((item) => (
+              {filtered.map((item, index) => (
                 <QueueItemRow
                   key={item.id}
                   item={item}
@@ -277,6 +290,8 @@ export const QueuePanel: React.FC<QueuePanelProps> = ({
                   columnWidths={columnWidths}
                   fillColumn={FILL_COLUMN}
                   onSelect={onSelect}
+                  onClose={id => { closeFocus.current = { id, index }; onCloseDocument(id); }}
+                  closeDisabled={isConverting}
                   onContextMenu={handleContextMenu}
                 />
               ))}

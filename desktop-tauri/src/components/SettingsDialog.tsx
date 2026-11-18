@@ -51,7 +51,7 @@ export default function SettingsDialog({ settings, format, isRunning, storageErr
       <div className="grid gap-5 sm:grid-cols-2 mb-5">
         <label className="text-sm">
           <span className="flex justify-between gap-2 mb-3"><span>بزرگ‌نمایی مطالعه</span><output className="font-mono text-xs text-muted" dir="ltr">{settings.previewZoom}%</output></span>
-          <input aria-label="بزرگ‌نمایی مطالعه" type="range" min="60" max="200" step="10" value={settings.previewZoom} onChange={event => onChange({ previewZoom: Number(event.target.value) })} className="w-full accent-blue-600" dir="ltr" />
+          <input aria-label="بزرگ‌نمایی مطالعه" type="range" min="60" max="200" value={settings.previewZoom} onChange={event => onChange({ previewZoom: Number(event.target.value) })} className="w-full accent-blue-600" dir="ltr" />
         </label>
         <label className="text-sm">
           <span className="flex justify-between gap-2 mb-3"><span>فاصلهٔ خطوط</span><output className="font-mono text-xs text-muted" dir="ltr">{settings.lineHeight.toFixed(1)}</output></span>
@@ -68,6 +68,7 @@ export default function SettingsDialog({ settings, format, isRunning, storageErr
       </fieldset>
       <Toggle title="شکستن خطوط طولانی کد" description="برای خواندن کدها بدون اسکرول افقی؛ متن اصلی فایل تغییری نمی‌کند." checked={settings.wrapCode} onChange={wrapCode => onChange({ wrapCode })} />
       <Toggle title="حفظ محل مطالعهٔ هر سند" description="هنگام جابه‌جایی بین اسناد همین صف، به محل قبلی مطالعه برگردید." checked={settings.rememberScroll} onChange={rememberScroll => onChange({ rememberScroll })} />
+      <Toggle title="ادامهٔ مطالعه پس از بستن برنامه" description="فایل‌های باز و محل مطالعه را برای اجرای بعد روی همین دستگاه نگه دار." checked={settings.resumeReading} onChange={resumeReading => onChange({ resumeReading })} />
       <p className="text-xs text-muted leading-6 mt-3">این گزینه‌ها فقط پیش‌نمایش را تغییر می‌دهند؛ قالب خروجی PDF و Word از پنل تبدیل تنظیم می‌شود.</p>
     </Section>
     <Section title="رفتار برنامه" icon={<SlidersHorizontal className="w-4 h-4 text-muted" />}>
@@ -91,7 +92,7 @@ export default function SettingsDialog({ settings, format, isRunning, storageErr
     <section className="settings-section">
       <h3 className="text-sm font-bold mb-3">میان‌برهای کاربردی</h3>
       <dl className="grid gap-2 text-xs text-muted">
-        {[[ 'Ctrl + O', 'بازکردن فایل' ], [ 'Ctrl + S', 'ذخیرهٔ ویرایش' ], [ 'Ctrl + Shift + S', 'ذخیره با نام دیگر' ], [ 'Ctrl + Z / Ctrl + Y', 'واگرد / انجام دوباره' ], [ 'Ctrl + F', 'جستجو در ویرایشگر' ], [ 'Ctrl + R / F5', 'تازه‌کردن سند' ], [ 'Delete', 'حذف انتخاب از صف' ], [ 'Ctrl + ,', 'تنظیمات برنامه' ], [ 'Esc', 'بستن تنظیمات' ]].map(([keys, label]) => <div key={keys} className="flex items-center justify-between gap-3"><dt>{label}</dt><dd><kbd dir="ltr" className="font-mono bg-subtle px-2 py-1 rounded">{keys}</kbd></dd></div>)}
+        {[[ 'Ctrl + O', 'بازکردن فایل' ], [ 'Ctrl + S', 'ذخیرهٔ ویرایش' ], [ 'Ctrl + Shift + S', 'ذخیره با نام دیگر' ], [ 'Ctrl + Z / Ctrl + Y', 'واگرد / انجام دوباره' ], [ 'Ctrl + F', 'جستجو در سند یا ویرایشگر' ], [ 'F3 / Shift + F3', 'نتیجهٔ بعدی یا قبلی در سند' ], [ 'Ctrl + R / F5', 'تازه‌کردن سند' ], [ 'Delete', 'حذف انتخاب از صف' ], [ 'Ctrl + ,', 'تنظیمات برنامه' ], [ 'Esc', 'بستن جستجو، تمام‌صفحه یا تنظیمات' ]].map(([keys, label]) => <div key={keys} className="flex items-center justify-between gap-3"><dt>{label}</dt><dd><kbd dir="ltr" className="font-mono bg-subtle px-2 py-1 rounded">{keys}</kbd></dd></div>)}
       </dl>
     </section>
     <div className="flex flex-wrap gap-2">

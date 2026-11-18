@@ -338,3 +338,7 @@ input[type='radio']:focus-visible {
   .preview-bar-label,
   .preview-bar-size { display: none; }
 }
+@container (max-width: 410px) {
+  .preview-bar-identity { display: none; }
+  .preview-bar-actions { gap: 0.25rem; }
+}

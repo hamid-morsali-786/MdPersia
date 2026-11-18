@@ -1,7 +1,7 @@
 import React from 'react';
 import { QueueItem } from '../types';
 import { ColumnKey } from './Queue/queueTypes';
-import { FileText, CheckCircle2, AlertCircle, Loader2, Clock, Eye } from 'lucide-react';
+import { CheckCircle2, AlertCircle, Loader2, Clock, Eye, X } from 'lucide-react';
 
 interface QueueItemRowProps {
   item: QueueItem;
@@ -11,6 +11,8 @@ interface QueueItemRowProps {
   /** Last visible column stretches to the panel width so the table never scrolls sideways. */
   fillColumn?: ColumnKey;
   onSelect: (id: string, e: { ctrlKey: boolean; metaKey: boolean }) => void;
+  onClose: (id: string) => void;
+  closeDisabled: boolean;
   onContextMenu: (e: React.MouseEvent, item: QueueItem) => void;
 }
 
@@ -63,6 +65,8 @@ export const QueueItemRow: React.FC<QueueItemRowProps> = ({
   columnWidths,
   fillColumn,
   onSelect,
+  onClose,
+  closeDisabled,
   onContextMenu,
 }) => {
   const widthOf = (key: ColumnKey) =>
@@ -87,9 +91,13 @@ export const QueueItemRow: React.FC<QueueItemRowProps> = ({
           style={{ width: widthOf('name') }}
         >
           <div className="flex items-center gap-2 min-w-0">
-            <FileText className="w-4 h-4 shrink-0 text-muted" />
+            <button type="button" disabled={closeDisabled} title="بستن سند" aria-label={`بستن ${item.name}`}
+              className="btn justify-center w-6 h-6 shrink-0 rounded text-muted hover:text-main hover:bg-hover"
+              onClick={event => { event.stopPropagation(); onClose(item.id); }}>
+              <X className="w-3.5 h-3.5" />
+            </button>
             {/* Latin filenames need an LTR run: RTL clipping hides the head, not the tail. */}
-            <span className="font-mono text-xs truncate min-w-0" dir="ltr" title={item.path}>
+            <span className="font-mono text-xs truncate min-w-0 flex-1 text-right" dir="ltr" title={item.path}>
               {item.name}
             </span>
             {item.unsaved && <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" role="img" aria-label="تغییرات ذخیره‌نشده" title="تغییرات ذخیره‌نشده" />}

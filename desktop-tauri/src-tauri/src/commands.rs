@@ -100,6 +100,9 @@ pub async fn document_io(app: AppHandle, runtime: State<'_, SharedRuntime>, requ
 pub struct FileInfo { path: String, name: String, size_bytes: u64, size_str: String, relative_path: String }
 fn file_info(path: &Path, root: &Path) -> Result<FileInfo, String> {
     let metadata = path.metadata().map_err(|e| e.to_string())?;
+    file_info_with_metadata(path, root, metadata)
+}
+fn file_info_with_metadata(path: &Path, root: &Path, metadata: std::fs::Metadata) -> Result<FileInfo, String> {
     if !metadata.is_file() { return Err("مسیر انتخاب‌شده فایل نیست.".into()); }
     Ok(FileInfo { path: path.to_string_lossy().replace('\\', "/"), name: path.file_name().unwrap_or_default().to_string_lossy().into(),
         size_bytes: metadata.len(), size_str: format!("{:.1} KB", metadata.len() as f64 / 1024.0),
@@ -107,9 +110,21 @@ fn file_info(path: &Path, root: &Path) -> Result<FileInfo, String> {
 }
 
 #[tauri::command]
-pub async fn stat_files(paths: Vec<String>) -> Result<Vec<FileInfo>, String> {
+pub async fn stat_files(paths: Vec<String>, skip_missing: Option<bool>) -> Result<Vec<FileInfo>, String> {
     if paths.len() > 10000 { return Err("تعداد فایل‌های انتخاب‌شده بیش از حد است.".into()); }
-    tauri::async_runtime::spawn_blocking(move || paths.iter().map(|p| file_info(Path::new(p), Path::new(p).parent().unwrap_or(Path::new("")))).collect()).await.map_err(|e| e.to_string())?
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut files = Vec::new();
+        for path in paths.iter().map(Path::new) {
+            let metadata = match path.metadata() {
+                Ok(metadata) if skip_missing == Some(true) && !metadata.is_file() => continue,
+                Ok(metadata) => metadata,
+                Err(error) if skip_missing == Some(true) && error.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(error) => return Err(error.to_string()),
+            };
+            files.push(file_info_with_metadata(path, path.parent().unwrap_or(Path::new("")), metadata)?);
+        }
+        Ok(files)
+    }).await.map_err(|e| e.to_string())?
 }
 
 #[tauri::command]

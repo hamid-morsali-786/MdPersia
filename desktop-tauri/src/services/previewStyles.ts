@@ -17,7 +17,7 @@ export function previewStyles(theme: string, zoom: number, reading: ReadingSetti
   const variables = Object.entries(colors).map(([name, value]) => `--preview-${name}:${value};`).join('');
   return `
     :root { ${variables} color-scheme:${dark ? 'dark' : 'light'}; }
-    html { zoom:${zoom}%; scroll-behavior:auto; overflow-y:auto; }
+    html { zoom:var(--mdpersia-preview-zoom, ${zoom}%); scroll-behavior:auto; overflow-y:auto; }
     html,body { margin:0; padding:0; }
     body,.markdown-body { background:var(--preview-page) !important; color:var(--preview-text) !important; }
     .markdown-body { padding:32px clamp(18px,4vw,44px) !important;
@@ -69,5 +69,7 @@ export function previewStyles(theme: string, zoom: number, reading: ReadingSetti
     .mermaid svg :is(.edgeLabel,.edgeLabel p,.edgeLabel span,.labelBkg,.note) {
       background:var(--preview-cluster) !important; fill:var(--preview-cluster) !important; }
     img { max-width:100%; height:auto; }
+    ::highlight(mdpersia-find) { background-color:${dark ? '#674d18' : '#fde68a'}; color:${dark ? '#fff5da' : '#31200a'}; }
+    ::highlight(mdpersia-find-active) { background-color:${dark ? '#f6ce82' : '#fbbf24'}; color:#2f210d; }
   `;
 }
