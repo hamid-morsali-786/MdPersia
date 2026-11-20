@@ -552,10 +552,13 @@ export function installDesktopBridge(server: BridgeServer, production = false) {
     if (!wanted) return json(res, { items: [], viewer: false });
     try {
       const file = path.resolve(wanted);
-      if (!isMarkdownPath(file) || !fs.statSync(file).isFile()) throw new Error('Not a Markdown file');
+      if (!isMarkdownPath(file) || !fs.statSync(file).isFile()) {
+        return json(res, { items: [], viewer: false, error: 'فایل یافت نشد یا قابل خواندن نیست.' }, 404);
+      }
       json(res, { items: [toItem(file, `document:${file}`)], viewer: true });
-    } catch {
-      json(res, { items: [], viewer: false, error: 'فایل یافت نشد یا قابل خواندن نیست.' }, 404);
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      json(res, { items: [], viewer: false, error: 'فایل یافت نشد یا قابل خواندن نیست.' }, code === 'ENOENT' || code === 'ENOTDIR' ? 404 : 503);
     }
   });
 

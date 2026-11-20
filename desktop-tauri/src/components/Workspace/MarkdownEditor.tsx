@@ -40,6 +40,7 @@ export default function MarkdownEditor({ path, text, theme, readOnly, onChange, 
 }) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
+  const retainFocus = useRef(true);
   const states = useRef(new Map<string, EditorState>());
   const callbacks = useRef({ onChange, onSave }); callbacks.current = { onChange, onSave };
   const appearance = useRef(new Compartment());
@@ -82,11 +83,14 @@ export default function MarkdownEditor({ path, text, theme, readOnly, onChange, 
       EditorView.updateListener.of(update => { if (update.docChanged) callbacks.current.onChange(update.state.doc.toString()); }),
     ] });
     const editor = new EditorView({ state, parent: host.current! });
-    view.current = editor; editor.focus();
+    view.current = editor;
+    if (retainFocus.current) editor.focus();
     const remeasure = () => editor.requestMeasure();
     document.fonts.addEventListener('loadingdone', remeasure);
     return () => {
       document.fonts.removeEventListener('loadingdone', remeasure);
+      // Switching documents must preserve focus on the queue if the user is working there.
+      retainFocus.current = editor.hasFocus;
       states.current.set(path, editor.state); editor.destroy(); view.current = null;
     };
     // Each document owns its undo history; ordinary typing must never recreate the editor.

@@ -1,5 +1,5 @@
 import { DOCUMENT_EXTENSIONS } from './services/documentFormats';
-import React, { lazy, Suspense, useState, useEffect, useCallback, useRef } from 'react';
+import React, { lazy, Suspense, useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react';
 import { QueueItem, ConvertOptions, LogEntry, ProgressEvent } from './types';
 import { DEFAULT_CONVERT_OPTIONS } from './services/cliTranslator';
 import {
@@ -12,11 +12,12 @@ import {
   readFileContent,
   fetchInitialItems,
   resolveStartupFiles,
+  restoreQueueFiles,
   onOpenFileRequested,
   isTauri,
 } from './services/tauriBridge';
 import { listenForHandoffs } from './services/singleInstance';
-import { documentKey, mergeQueueItems, removeQueueItems } from './services/queueState';
+import { documentKey, filterQueueItems, mergeQueueItems, removeQueueItems } from './services/queueState';
 import { DEFAULT_APP_SETTINGS, readPreferences, savePreferences, type AppSettings } from './services/appSettings';
 import { draftIsDirty, useDocumentEditor } from './services/useDocumentEditor';
 import type { DocumentSnapshot } from './services/documents';
@@ -29,6 +30,8 @@ import { QueuePanel } from './components/QueuePanel';
 import { InspectorPanel } from './components/InspectorPanel';
 import { WorkspacePanel } from './components/WorkspacePanel';
 import { PaneSplitter } from './components/PaneSplitter';
+import { readReadingSession, writeReadingSession, type ReadingPosition } from './services/readingSession';
+import { capturePreviewPosition } from './services/previewViewport';
 
 type NativeBusy = 'files' | 'folder' | 'output-dir' | 'explorer' | null;
 type WorkspaceTab = 'preview' | 'terminal';
@@ -116,6 +119,11 @@ export const App: React.FC = () => {
   const [query, setQuery] = useState('');
   const [nativeBusy, setNativeBusy] = useState<NativeBusy>(null);
   const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>('preview');
+  const [readingFullscreen, setReadingFullscreen] = useState(false);
+  const [fullscreenError, setFullscreenError] = useState('');
+  const fullscreenTransition = useRef(false);
+  const previewFrame = useRef<HTMLIFrameElement>(null);
+  const restorePreviewPosition = useRef<(() => void) | undefined>(undefined);
   const zoom = settings.previewZoom;
   const [previewNonce, setPreviewNonce] = useState(0);
 
@@ -142,7 +150,41 @@ export const App: React.FC = () => {
 
   const itemsRef = useRef(items);
   itemsRef.current = items;
+  const [sessionReady, setSessionReady] = useState(false);
+  const sessionReadyRef = useRef(false);
+  const sessionRestoreFailed = useRef(false);
+  const readingPositions = useRef(new Map<string, ReadingPosition>());
+  const sessionTimer = useRef<number | undefined>(undefined);
+  const persistSession = useCallback(() => {
+    if (!sessionReadyRef.current || sessionRestoreFailed.current || !settingsRef.current.resumeReading) return;
+    const openItems = itemsRef.current;
+    const activePath = openItems.find(item => item.id === activeItemRef.current)?.path ?? null;
+    writeReadingSession(openItems.map(item => item.path), activePath, readingPositions.current);
+  }, []);
+  const queueSessionWrite = useCallback(() => {
+    if (!sessionReadyRef.current || !settingsRef.current.resumeReading) return;
+    window.clearTimeout(sessionTimer.current);
+    sessionTimer.current = window.setTimeout(persistSession, 400);
+  }, [persistSession]);
+
+  useEffect(() => {
+    if (!sessionReady) return;
+    if (settings.resumeReading) persistSession();
+    else {
+      sessionRestoreFailed.current = false;
+      writeReadingSession([], null, readingPositions.current);
+    }
+  }, [sessionReady, settings.resumeReading, items, activeItemId, persistSession]);
+
+  useEffect(() => {
+    window.addEventListener('pagehide', persistSession);
+    return () => {
+      window.removeEventListener('pagehide', persistSession);
+      window.clearTimeout(sessionTimer.current);
+    };
+  }, [persistSession]);
   const openRequest = useRef(0);
+  const startupFiles = useRef<Promise<string[]> | null>(null);
   const queueEpoch = useRef(0);
   const removedRequests = useRef(new Map<string, number>());
   const selectionAnchor = useRef<string | null>(null);
@@ -212,7 +254,7 @@ export const App: React.FC = () => {
     const { items: initial, viewer } = await fetchInitialItems(file);
     if (epoch !== queueEpoch.current) return;
     if (initial.length === 0) {
-      if (request === openRequest.current) setStatusMessage(file ? 'فایل باز نشد؛ وجود فایل و دسترسی به آن را بررسی کنید.' : 'برای شروع یک فایل Markdown باز کنید.');
+      if (request === openRequest.current && (file || !itemsRef.current.length)) setStatusMessage(file ? 'فایل باز نشد؛ وجود فایل و دسترسی به آن را بررسی کنید.' : 'برای شروع یک فایل Markdown باز کنید.');
       return;
     }
     const delivered = initial.filter(item => (removedRequests.current.get(documentKey(item.path)) ?? -1) < request);
@@ -225,21 +267,50 @@ export const App: React.FC = () => {
 
   useEffect(() => {
     let cancelled = false;
-    resolveStartupFiles()
-      .then(async (files) => {
-        if (cancelled) return;
-        // The launcher/server broker handles OS handoffs without a timed browser probe.
-        if (files.length) files.forEach(file => loadDocuments(file, true));
-        else loadDocuments(null, false);
+    const epoch = queueEpoch.current;
+    const openAtStartup = openRequest.current;
+    const saved = settingsRef.current.resumeReading ? readReadingSession() : null;
+    // Native startup arguments are drained once, even when development StrictMode replays the effect.
+    startupFiles.current ??= resolveStartupFiles();
+    const incoming = startupFiles.current.then(files => Promise.all(
+      files.length ? files.map(file => fetchInitialItems(file)) : [fetchInitialItems(null)],
+    ));
+    void Promise.allSettled([incoming, restoreQueueFiles(saved?.paths ?? [])])
+      .then(([startup, restored]) => {
+        if (cancelled || epoch !== queueEpoch.current) return;
+        const stillOpen = (item: QueueItem) => (removedRequests.current.get(documentKey(item.path)) ?? -1) < openAtStartup;
+        const restoredItems = restored.status === 'fulfilled' && settingsRef.current.resumeReading ? restored.value.filter(stillOpen) : [];
+        const launchedItems = startup.status === 'fulfilled' ? startup.value.flatMap(result => result.items).filter(stillOpen) : [];
+        for (const item of restoredItems) {
+          const key = documentKey(item.path);
+          const position = saved?.positions.get(key);
+          if (position && !readingPositions.current.has(key)) readingPositions.current.set(key, { ...position, restoreOnOpen: true });
+        }
+        if (restoredItems.length || launchedItems.length) {
+          appendItems([...restoredItems, ...launchedItems], undefined, false);
+          const activeKey = saved?.activePath ? documentKey(saved.activePath) : '';
+          const launch = launchedItems.at(-1);
+          const active = launch ?? restoredItems.find(item => documentKey(item.path) === activeKey) ?? restoredItems[0];
+          if (!activeItemRef.current || (launch && openRequest.current === openAtStartup)) {
+            appendItems([active], launch ? `«${launch.name}» باز شد.` : `${restoredItems.length} سند از مطالعهٔ قبلی باز شد.`, true, true);
+          }
+        }
+        if (restored.status === 'rejected') {
+          sessionRestoreFailed.current = true;
+          setStatusMessage('بازیابی نشست قبلی ممکن نشد. نشست برای اجرای بعد حفظ شد.');
+          appendLog('warn', `بازیابی نشست مطالعه انجام نشد: ${String(restored.reason)}`);
+        }
         const url = new URL(window.location.href);
         url.searchParams.delete('file');
         window.history.replaceState(null, '', url);
       })
-      .catch(() => loadDocuments(null, false));
+      .finally(() => {
+        if (!cancelled) { sessionReadyRef.current = true; setSessionReady(true); }
+      });
     return () => {
       cancelled = true;
     };
-  }, [loadDocuments]);
+  }, [appendItems, appendLog]);
 
   /** Single instance: a second launch routes its file into this running window. */
   useEffect(() => {
@@ -264,6 +335,66 @@ export const App: React.FC = () => {
   }, [loadDocuments, appendLog]);
 
   const selectedItem = items.find((it) => it.id === activeItemId) || null;
+  const setFullscreenReading = useCallback(async (enabled: boolean) => {
+    if (fullscreenTransition.current) return;
+    fullscreenTransition.current = true;
+    setFullscreenError('');
+    restorePreviewPosition.current = capturePreviewPosition(previewFrame.current);
+    try {
+      if (isTauri()) {
+        const { getCurrentWindow } = await import('@tauri-apps/api/window');
+        await getCurrentWindow().setFullscreen(enabled);
+      } else if (enabled) {
+        await document.documentElement.requestFullscreen();
+      } else if (document.fullscreenElement === document.documentElement) {
+        await document.exitFullscreen();
+      }
+      setReadingFullscreen(enabled);
+    } catch {
+      restorePreviewPosition.current = undefined;
+      setFullscreenError('تغییر حالت تمام‌صفحه انجام نشد. دوباره تلاش کنید.');
+    } finally {
+      fullscreenTransition.current = false;
+    }
+  }, []);
+
+  useLayoutEffect(() => {
+    const restore = restorePreviewPosition.current;
+    restorePreviewPosition.current = undefined;
+    if (!restore) return;
+    restore();
+    const frame = window.requestAnimationFrame(restore);
+    return () => window.cancelAnimationFrame(frame);
+  }, [readingFullscreen]);
+
+  useEffect(() => {
+    const syncBrowserExit = () => {
+      if (!document.fullscreenElement && !isTauri()) {
+        restorePreviewPosition.current ??= capturePreviewPosition(previewFrame.current);
+        setReadingFullscreen(false);
+      }
+    };
+    document.addEventListener('fullscreenchange', syncBrowserExit);
+    return () => document.removeEventListener('fullscreenchange', syncBrowserExit);
+  }, []);
+
+  useEffect(() => {
+    // Enable pinch delivery in WebView2, but keep its page zoom off the workspace chrome.
+    const preventWorkspaceZoom = (event: WheelEvent) => { if (event.ctrlKey) event.preventDefault(); };
+    const preventZoomHotkey = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && ['+', '=', '-', '0'].includes(event.key)) event.preventDefault();
+    };
+    document.addEventListener('wheel', preventWorkspaceZoom, { passive: false });
+    window.addEventListener('keydown', preventZoomHotkey);
+    return () => {
+      document.removeEventListener('wheel', preventWorkspaceZoom);
+      window.removeEventListener('keydown', preventZoomHotkey);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (readingFullscreen && !selectedItem) void setFullscreenReading(false);
+  }, [readingFullscreen, selectedItem, setFullscreenReading]);
 
   useEffect(() => {
     if (!selectedItem?.path) {
@@ -343,7 +474,7 @@ export const App: React.FC = () => {
     setActiveItemId(id);
     setWorkspaceTab('preview');
     if (e.shiftKey && selectionAnchor.current) {
-      const visible = items.filter(item => !query.trim() || `${item.name} ${item.relativePath || ''}`.toLowerCase().includes(query.trim().toLowerCase()));
+      const visible = filterQueueItems(items, query);
       const anchor = visible.findIndex(item => item.id === selectionAnchor.current);
       const target = visible.findIndex(item => item.id === id);
       if (anchor >= 0 && target >= 0) {
@@ -577,7 +708,11 @@ export const App: React.FC = () => {
 
   const removeDocumentsNow = (ids: Set<string>) => {
     if (isRunning) return;
-    for (const item of itemsRef.current) if (ids.has(item.id)) removedRequests.current.set(documentKey(item.path), openRequest.current);
+    for (const item of itemsRef.current) if (ids.has(item.id)) {
+      const key = documentKey(item.path);
+      removedRequests.current.set(key, openRequest.current);
+      readingPositions.current.delete(key);
+    }
     const next = removeQueueItems(itemsRef.current, ids, activeItemRef.current);
     itemsRef.current = next.items;
     setItems(next.items);
@@ -598,6 +733,7 @@ export const App: React.FC = () => {
     queueEpoch.current++;
     removedRequests.current.clear();
     selectionAnchor.current = null;
+    readingPositions.current.clear();
     openRequest.current++;
     itemsRef.current = [];
     setItems([]);
@@ -718,7 +854,17 @@ export const App: React.FC = () => {
 
   useEffect(() => {
     const shortcut = (event: KeyboardEvent) => {
-      if (settingsOpen || confirmClear || pendingEdits || document.querySelector('dialog[open]')) return;
+      if (event.defaultPrevented || settingsOpen || confirmClear || pendingEdits || document.querySelector('dialog[open]')) return;
+      if (readingFullscreen) {
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          void setFullscreenReading(false);
+        } else if (event.key === 'F5' || ((event.ctrlKey || event.metaKey) &&
+          (['Comma', 'KeyO', 'KeyW', 'KeyR', 'KeyS'].includes(event.code) || [',', 'o', 'w', 'r', 's'].includes(event.key.toLowerCase())))) {
+          event.preventDefault();
+        }
+        return;
+      }
       const editing = event.target instanceof HTMLElement &&
         (event.target.matches('input, textarea, select') || event.target.isContentEditable);
       if ((event.ctrlKey || event.metaKey) && event.code === 'Comma') {
@@ -736,7 +882,7 @@ export const App: React.FC = () => {
     };
     window.addEventListener('keydown', shortcut);
     return () => window.removeEventListener('keydown', shortcut);
-  }, [activeItemId, selectedIds, isRunning, nativeBusy, settingsOpen, confirmClear, pendingEdits]);
+  }, [activeItemId, selectedIds, isRunning, nativeBusy, settingsOpen, confirmClear, pendingEdits, readingFullscreen, setFullscreenReading]);
 
   const closeGuard = useRef(guardEdits); closeGuard.current = guardEdits;
   useEffect(() => {
@@ -746,6 +892,7 @@ export const App: React.FC = () => {
       const window = getCurrentWindow();
       const stop = await window.onCloseRequested(event => {
         const paths = Object.values(editor.ref.current).filter(draft => draftIsDirty(draft) || draft.saving).map(draft => draft.path);
+        persistSession();
         if (!paths.length) return;
         event.preventDefault();
         closeGuard.current(paths, () => { unlisten?.(); void window.close(); });
@@ -753,11 +900,11 @@ export const App: React.FC = () => {
       if (disposed) stop(); else unlisten = stop;
     });
     return () => { disposed = true; unlisten?.(); };
-  }, [editor.ref]);
+  }, [editor.ref, persistSession]);
 
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-app text-main transition-colors duration-200">
-      <Header theme={theme} onToggleTheme={handleToggleTheme} onOpenSettings={() => setSettingsOpen(true)} settingsOpen={settingsOpen} isBusy={!!nativeBusy || (isRunning && !isWatching) || conversionRuntime.busy} />
+      {!readingFullscreen && <Header theme={theme} onToggleTheme={handleToggleTheme} onOpenSettings={() => setSettingsOpen(true)} settingsOpen={settingsOpen} isBusy={!!nativeBusy || (isRunning && !isWatching) || conversionRuntime.busy} />}
       {runtimeDialogOpen && <AppDialog title="آماده‌سازی خروجی PDF و Word" description="دریافت موتور تبدیل اختیاری است و فقط با انتخاب شما شروع می‌شود."
         onClose={() => setRuntimeDialogOpen(false)} footer={<>
           <button type="button" className="btn px-3 py-2 rounded-md border border-subtle hover:bg-subtle text-sm" onClick={() => setRuntimeDialogOpen(false)}>ادامهٔ مطالعه</button>
@@ -807,6 +954,7 @@ export const App: React.FC = () => {
       <main className="flex-1 flex overflow-hidden relative">
         {/* Zone A: Document Batch Queue (Right-most in RTL) */}
         <section
+          hidden={readingFullscreen}
           style={{ width: `${queueWidth}px` }}
           className="h-full shrink-0 overflow-hidden"
         >
@@ -824,13 +972,14 @@ export const App: React.FC = () => {
             onPickFilesNative={handlePickFilesNative}
             onAddFolder={handleAddFolder}
             onRemoveSelected={handleRemoveSelected}
+            onCloseDocument={id => removeDocuments(new Set([id]))}
             onClearAll={handleClearAll}
             onOpenFile={revealInExplorer}
             onRevealFolder={revealFolderInExplorer}
           />
         </section>
 
-        <PaneSplitter
+        {!readingFullscreen && <PaneSplitter
           onResize={handleResizeQueue}
           value={queueWidth} min={QUEUE_MIN} max={QUEUE_MAX}
           onReset={() => {
@@ -839,11 +988,17 @@ export const App: React.FC = () => {
             storeWidth('pane_queue_width_v2', w);
           }}
           title="تغییر عرض ستون صف (بکشید / دوبار کلیک برای ریست)"
-        />
+        />}
 
         {/* Workspace Preview & Terminal (center) */}
         <section aria-label="محیط مطالعه" className="flex-1 min-w-0 h-full overflow-hidden">
           <WorkspacePanel
+            readingFullscreen={readingFullscreen}
+            fullscreenError={fullscreenError}
+            onToggleFullscreen={() => void setFullscreenReading(!readingFullscreen)}
+            previewFrame={previewFrame}
+            readingPositions={readingPositions.current}
+            onReadingPositionChange={queueSessionWrite}
             inspectorOpen={!inspectorCollapsed}
             onToggleInspector={toggleInspector}
             selectedItem={selectedItem}
@@ -871,7 +1026,7 @@ export const App: React.FC = () => {
             onOpenDocument={(path) => loadDocuments(path, true)}
           />
         </section>
-        <PaneSplitter
+        {!readingFullscreen && <PaneSplitter
           onResize={handleResizeInspector}
           value={inspectorCollapsed ? 0 : inspectorWidth} min={0} max={INSPECTOR_MAX}
           growTowards="right"
@@ -883,10 +1038,11 @@ export const App: React.FC = () => {
             storeWidth('pane_inspector_width', w);
           }}
           title="تغییر عرض پنل تنظیمات (بکشید / دوبار کلیک برای ریست)"
-        />
+        />}
 
         {/* Output Inspector (left) */}
         <section
+          hidden={readingFullscreen}
           id="output-inspector" aria-label="تنظیمات خروجی" inert={inspectorCollapsed}
           style={{ width: inspectorCollapsed ? 0 : `${inspectorWidth}px` }}
           className="h-full shrink-0 overflow-hidden"
@@ -912,7 +1068,7 @@ export const App: React.FC = () => {
 
       </main>
 
-      <StatusBar
+      {!readingFullscreen && <StatusBar
         statusMessage={conversionRuntime.busy && !isRunning ? `${runtimePhase(conversionRuntime.info.phase)}${['downloading', 'copying'].includes(conversionRuntime.info.phase) && conversionRuntime.info.totalBytes ? `: ${Math.floor(conversionRuntime.info.downloadedBytes * 100 / conversionRuntime.info.totalBytes)}%` : ''}` : statusMessage}
         progressPercent={progressPercent}
         isRunning={isRunning}
@@ -921,7 +1077,7 @@ export const App: React.FC = () => {
         completedItems={completedCount}
         conversionReady={conversionRuntime.native ? conversionRuntime.info.installed : undefined}
         onManageConversion={() => setRuntimeDialogOpen(true)}
-      />
+      />}
     </div>
   );
 };

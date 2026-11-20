@@ -8,6 +8,18 @@ export function documentKey(path: string): string {
     ? normalized.toLowerCase() : normalized;
 }
 
+export function filterQueueItems(items: QueueItem[], query: string): QueueItem[] {
+  const normalize = (text: string) => text.normalize('NFC').toLowerCase()
+    .replace(/\\/g, '/').replace(/[يى]/g, 'ی').replace(/ك/g, 'ک');
+  const needle = normalize(query.trim());
+  if (!needle) return items;
+  return items.filter(item =>
+    normalize(item.name).includes(needle) ||
+    normalize(item.path).includes(needle) ||
+    normalize(item.relativePath ?? '').includes(needle)
+  );
+}
+
 export function mergeQueueItems(current: QueueItem[], incoming: QueueItem[]) {
   const items = [...current];
   const positions = new Map(items.map((item, index) => [documentKey(item.path), index]));

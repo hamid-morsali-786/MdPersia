@@ -519,7 +519,8 @@ export async function fetchInitialItems(file?: string | null): Promise<InitialLo
   if (isTauri()) {
     // The packaged app has no dev server to ask; the handed path is the whole queue.
     if (!file) return { items: [], viewer: false };
-    return { items: [await queueItemFromPath(file)], viewer: true };
+    try { return { items: await restoreQueueFiles([file]), viewer: true }; }
+    catch { return { items: [], viewer: true }; }
   }
 
   try {
@@ -534,19 +535,26 @@ export async function fetchInitialItems(file?: string | null): Promise<InitialLo
   }
 }
 
-async function queueItemFromPath(filePath: string): Promise<QueueItem> {
-  const [file] = await statFiles([filePath]);
-  const sizeBytes = file?.sizeBytes ?? 0;
-  const name = filePath.replace(/^.*[\\/]/, '');
-  return {
-    id: `document:${filePath}`,
-    name,
-    path: filePath.replace(/\\/g, '/'),
-    sizeBytes,
-    sizeStr: `${(sizeBytes / 1024).toFixed(1)} KB`,
-    status: 'pending',
-    relativePath: name,
-  };
+/** Restore only accessible documents, without inventing queue rows for stale paths. */
+export async function restoreQueueFiles(paths: string[]): Promise<QueueItem[]> {
+  if (!paths.length) return [];
+  if (isTauri()) {
+    const { invoke } = await import('@tauri-apps/api/core');
+    const files = await invoke<PickedFile[]>('stat_files', { paths, skipMissing: true });
+    return files.map(file => ({ ...file, id: '', status: 'pending' }));
+  }
+  const items: QueueItem[] = [];
+  for (let offset = 0; offset < paths.length; offset += 16) {
+    const batch = await Promise.all(paths.slice(offset, offset + 16).map(async path => {
+      const response = await fetch(`/api/initial-items?file=${encodeURIComponent(path)}`);
+      if (response.status === 404) return [];
+      if (!response.ok) throw new Error(`Session file status: ${response.status}`);
+      const result: InitialLoad = await response.json();
+      return result.items;
+    }));
+    items.push(...batch.flat());
+  }
+  return items;
 }
 
 export const previewEndpointUrl = (path: string, theme: string, zoom: number): string =>

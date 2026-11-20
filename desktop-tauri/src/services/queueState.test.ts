@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { documentKey, linkedMarkdownPath, mergeQueueItems, removeQueueItems } from './queueState';
+import { documentKey, filterQueueItems, linkedMarkdownPath, mergeQueueItems, removeQueueItems } from './queueState';
 import type { QueueItem } from '../types';
 
 const file = (path: string): QueueItem => ({ id: 'open-0', path,
@@ -39,6 +39,15 @@ test('identical basenames in different folders remain distinct', () => {
   const result = mergeQueueItems([], [file('C:/one/README.md'), file('C:/two/README.md')]);
   assert.equal(result.items.length, 2);
   assert.notEqual(result.items[0].id, result.items[1].id);
+});
+
+test('queue search compares full paths and common Persian and Arabic spelling variants', () => {
+  const first = file('C:/Docs/شبکه/یادداشت.md');
+  const second = file('C:/Other/یادداشت.md');
+  const items = [first, second];
+  assert.deepEqual(filterQueueItems(items, ' c:\\docs\\شبكه '), [first]);
+  assert.deepEqual(filterQueueItems(items, 'يادداشت.MD'), items);
+  assert.deepEqual(filterQueueItems(items, 'missing'), []);
 });
 
 test('concurrent deliveries can merge against the latest queue without replacing prior files', () => {

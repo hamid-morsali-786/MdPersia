@@ -17,7 +17,7 @@ export function previewStyles(theme: string, zoom: number, reading: ReadingSetti
   const variables = Object.entries(colors).map(([name, value]) => `--preview-${name}:${value};`).join('');
   return `
     :root { ${variables} color-scheme:${dark ? 'dark' : 'light'}; }
-    html { zoom:${zoom}%; scroll-behavior:auto; overflow-y:auto; }
+    html { zoom:var(--mdpersia-preview-zoom, ${zoom}%); scroll-behavior:auto; overflow-y:auto; }
     html,body { margin:0; padding:0; }
     body,.markdown-body { background:var(--preview-page) !important; color:var(--preview-text) !important; }
     .markdown-body { padding:32px clamp(18px,4vw,44px) !important;
@@ -60,14 +60,20 @@ export function previewStyles(theme: string, zoom: number, reading: ReadingSetti
     .mermaid svg :is(.node rect,.node circle,.node ellipse,.node polygon,.node path,.actor,.labelBox,.activation0,.activation1,.activation2) {
       fill:var(--preview-node) !important; stroke:var(--preview-edge) !important; }
     .mermaid svg .cluster rect { fill:var(--preview-cluster) !important; stroke:var(--preview-border) !important; }
+    /* Mermaid puts authored colors on label wrappers. Let the rendered text inherit them. */
     .mermaid svg :is(text,.label,.nodeLabel,.cluster-label,.edgeLabel,.messageText,.loopText,.noteText) {
       fill:var(--preview-text) !important; color:var(--preview-text) !important; }
-    .mermaid svg :is(.label,.nodeLabel,.cluster-label,.edgeLabel) * { color:var(--preview-text) !important; }
+    /* Resolve the direction per label without changing the diagram's layout direction. */
+    .mermaid svg foreignObject :is(.nodeLabel,.edgeLabel),
+    .mermaid svg foreignObject :is(.nodeLabel,.edgeLabel) p {
+      unicode-bidi:plaintext !important; text-align:center !important; }
     .mermaid svg :is(.flowchart-link,.edgePath path,.messageLine0,.messageLine1,.actor-line,.loopLine,line) {
       stroke:var(--preview-edge) !important; stroke-width:1.8px !important; }
     .mermaid svg marker path { fill:var(--preview-edge) !important; stroke:var(--preview-edge) !important; }
     .mermaid svg :is(.edgeLabel,.edgeLabel p,.edgeLabel span,.labelBkg,.note) {
       background:var(--preview-cluster) !important; fill:var(--preview-cluster) !important; }
     img { max-width:100%; height:auto; }
+    ::highlight(mdpersia-find) { background-color:${dark ? '#674d18' : '#fde68a'}; color:${dark ? '#fff5da' : '#31200a'}; }
+    ::highlight(mdpersia-find-active) { background-color:${dark ? '#f6ce82' : '#fbbf24'}; color:#2f210d; }
   `;
 }

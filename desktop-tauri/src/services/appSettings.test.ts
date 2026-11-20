@@ -19,7 +19,7 @@ test('preferences migrate the old theme without inventing queued documents', () 
 
 test('reading and behavior preferences round trip and never resume Watch', () => {
   const local = storage();
-  const settings = { ...DEFAULT_APP_SETTINGS, theme: 'system' as const, previewZoom: 130, focusNewFiles: false, wrapCode: true };
+  const settings = { ...DEFAULT_APP_SETTINGS, theme: 'system' as const, previewZoom: 127, focusNewFiles: false, wrapCode: true, resumeReading: true };
   const options = { ...DEFAULT_CONVERT_OPTIONS, format: 'docx' as const, outputDir: 'I:/اسناد', watch: true };
   assert.equal(savePreferences(settings, options, local), true);
   assert.deepEqual(readPreferences(local), { settings, options: { ...options, watch: false } });
