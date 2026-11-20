@@ -60,9 +60,13 @@ export function previewStyles(theme: string, zoom: number, reading: ReadingSetti
     .mermaid svg :is(.node rect,.node circle,.node ellipse,.node polygon,.node path,.actor,.labelBox,.activation0,.activation1,.activation2) {
       fill:var(--preview-node) !important; stroke:var(--preview-edge) !important; }
     .mermaid svg .cluster rect { fill:var(--preview-cluster) !important; stroke:var(--preview-border) !important; }
+    /* Mermaid puts authored colors on label wrappers. Let the rendered text inherit them. */
     .mermaid svg :is(text,.label,.nodeLabel,.cluster-label,.edgeLabel,.messageText,.loopText,.noteText) {
       fill:var(--preview-text) !important; color:var(--preview-text) !important; }
-    .mermaid svg :is(.label,.nodeLabel,.cluster-label,.edgeLabel) * { color:var(--preview-text) !important; }
+    /* Resolve the direction per label without changing the diagram's layout direction. */
+    .mermaid svg foreignObject :is(.nodeLabel,.edgeLabel),
+    .mermaid svg foreignObject :is(.nodeLabel,.edgeLabel) p {
+      unicode-bidi:plaintext !important; text-align:center !important; }
     .mermaid svg :is(.flowchart-link,.edgePath path,.messageLine0,.messageLine1,.actor-line,.loopLine,line) {
       stroke:var(--preview-edge) !important; stroke-width:1.8px !important; }
     .mermaid svg marker path { fill:var(--preview-edge) !important; stroke:var(--preview-edge) !important; }
