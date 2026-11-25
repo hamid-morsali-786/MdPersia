@@ -1,5 +1,5 @@
 import { copyDocumentPath } from '../../services/documentFormats';
-import React, { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import React, { lazy, Suspense, useEffect, useRef, useState, type RefObject } from 'react';
 import { QueueItem } from '../../types';
 import {
   ExternalLink,
@@ -11,7 +11,7 @@ import {
   RotateCw,
   Loader2,
   AlertTriangle,
-  Pencil, Save, Copy, Check, X,
+  Pencil, Save, Copy, Check, Search, X,
 } from 'lucide-react';
 import { Tooltip } from '../Tooltip';
 import { openExternalUrl, applyPreviewAppearance, loadPreviewDocument, loadDraftPreview, PreviewSource } from '../../services/tauriBridge';
@@ -21,6 +21,9 @@ import { draftIsDirty, type DocumentEditor, type EditorDraft } from '../../servi
 import { documentKey } from '../../services/queueState';
 import { DocumentFailure, pickSaveMarkdown, readDocument, type DocumentSnapshot } from '../../services/documents';
 import { AppDialog } from '../AppDialog';
+import { PreviewFindBar } from './PreviewFindBar';
+import { findPreviewMatches, highlightPreviewMatches, revealPreviewMatch } from '../../services/previewFind';
+import type { ReadingPosition } from '../../services/readingSession';
 
 const MarkdownEditor = lazy(() => import('./MarkdownEditor'));
 
@@ -35,6 +38,11 @@ interface PreviewTabProps {
   onOpenInEditor?: (path: string) => void;
   onOpenDocument?: (path: string) => void;
   readingSettings: ReadingSettings;
+  readingFullscreen: boolean;
+  active: boolean;
+  previewFrame: RefObject<HTMLIFrameElement | null>;
+  readingPositions: Map<string, ReadingPosition>;
+  onReadingPositionChange: () => void;
   editor: DocumentEditor;
   isRunning: boolean;
   onSavedCopy: (document: DocumentSnapshot) => void;
@@ -69,6 +77,7 @@ export const PreviewTab: React.FC<PreviewTabProps> = ({
   onOpenInEditor,
   onOpenDocument,
   readingSettings,
+  readingFullscreen, active, previewFrame: iframe, readingPositions, onReadingPositionChange,
   editor, isRunning, onSavedCopy,
 }) => {
   const [viewMode, setViewMode] = useState<'rendered' | 'source'>('rendered');
@@ -82,25 +91,37 @@ export const PreviewTab: React.FC<PreviewTabProps> = ({
   const [copyBusy, setCopyBusy] = useState(false);
   const [copyTarget, setCopyTarget] = useState<{ source: string; path: string; revision: string } | null>(null);
   const [reloadConfirm, setReloadConfirm] = useState(false);
+  const [findOpen, setFindOpen] = useState(false);
+  const [findQuery, setFindQuery] = useState('');
+  const [matchIndex, setMatchIndex] = useState(0);
+  const [findResult, setFindResult] = useState<{ doc: Document; query: string; ranges: Range[]; capped: boolean } | null>(null);
+  const [renderedDoc, setRenderedDoc] = useState<{ doc: Document; path: string } | null>(null);
+  const findInput = useRef<HTMLInputElement>(null);
   const draft = selectedItem ? editor.drafts[documentKey(selectedItem.path)] : undefined;
   const dirty = draftIsDirty(draft);
   const lastEditor = useRef<{ path: string; draft: EditorDraft } | null>(null);
   if (draft && selectedItem) lastEditor.current = { path: selectedItem.path, draft };
-  const iframe = useRef<HTMLIFrameElement>(null);
-  const scrollPositions = useRef(new Map<string, { x: number; y: number }>());
+  const zoomControl = useRef({ zoom, onZoomChange });
+  zoomControl.current = { zoom, onZoomChange };
   const readingRef = useRef(readingSettings);
   readingRef.current = readingSettings;
 
   const updateAppearance = () => {
     const doc = iframe.current?.contentDocument;
-    if (doc?.head) applyPreviewAppearance(doc, theme, zoom, readingSettings);
+    if (doc?.head) {
+      applyPreviewAppearance(doc, theme, zoomControl.current.zoom, readingSettings);
+      doc.documentElement.style.setProperty('--mdpersia-preview-zoom', `${zoomControl.current.zoom}%`);
+    }
   };
 
-  useEffect(updateAppearance, [theme, zoom, preview, readingSettings.lineHeight, readingSettings.readingWidth, readingSettings.wrapCode]);
+  useEffect(updateAppearance, [theme, preview, readingSettings.lineHeight, readingSettings.readingWidth, readingSettings.wrapCode]);
+  useEffect(() => {
+    iframe.current?.contentDocument?.documentElement.style.setProperty('--mdpersia-preview-zoom', `${zoom}%`);
+  }, [zoom]);
 
   useEffect(() => {
-    if (!readingSettings.rememberScroll) scrollPositions.current.clear();
-  }, [readingSettings.rememberScroll]);
+    if (!readingSettings.rememberScroll && !readingSettings.resumeReading) readingPositions.clear();
+  }, [readingSettings.rememberScroll, readingSettings.resumeReading, readingPositions]);
 
   useEffect(() => {
     if (!editing || !selectedItem) return;
@@ -109,9 +130,10 @@ export const PreviewTab: React.FC<PreviewTabProps> = ({
     return () => { stale = true; };
   }, [editing, selectedItem?.path, editor.open]);
 
+  const previewPaused = editing && !livePreview && !readingFullscreen && !findOpen;
   useEffect(() => {
     if (!selectedItem) return;
-    if (editing && !livePreview) { setPreviewBusy(false); return; }
+    if (previewPaused) { setPreviewBusy(false); return; }
     let stale = false;
     const controller = new AbortController();
     const file = selectedItem.path;
@@ -128,7 +150,71 @@ export const PreviewTab: React.FC<PreviewTabProps> = ({
     return () => {
       stale = true; window.clearTimeout(timer); controller.abort();
     };
-  }, [selectedItem?.path, previewNonce, draft?.text, editing, livePreview]);
+  }, [selectedItem?.path, previewNonce, draft?.text, previewPaused]);
+
+  const findDocument = renderedDoc && renderedDoc.path === selectedItem?.path ? renderedDoc.doc : null;
+  const matching = findResult?.doc === findDocument && findResult.query === findQuery ? findResult : null;
+  const count = matching?.ranges.length ?? 0;
+  const currentMatch = count ? matchIndex % count : 0;
+
+  const moveMatch = (direction: number) => {
+    if (count) setMatchIndex(index => (index + direction + count) % count);
+  };
+
+  const openFind = () => {
+    if (!readingFullscreen) setViewMode('rendered');
+    if (findOpen) { findInput.current?.focus(); findInput.current?.select(); }
+    else setFindOpen(true);
+  };
+
+  const closeFind = () => {
+    setFindOpen(false);
+    iframe.current?.focus({ preventScroll: true });
+  };
+
+  useEffect(() => {
+    if (findOpen && active && selectedItem) { findInput.current?.focus(); findInput.current?.select(); }
+  }, [findOpen, active, selectedItem?.path]);
+
+  useEffect(() => {
+    if (!readingFullscreen && viewMode === 'source') setFindOpen(false);
+  }, [readingFullscreen, viewMode]);
+
+  useEffect(() => {
+    if (!findOpen || !active || !findDocument || !findQuery.trim()) { setFindResult(null); return; }
+    const timer = window.setTimeout(() => {
+      setFindResult({ doc: findDocument, query: findQuery, ...findPreviewMatches(findDocument, findQuery) });
+      setMatchIndex(0);
+    }, 120);
+    return () => window.clearTimeout(timer);
+  }, [findOpen, active, findDocument, findQuery]);
+
+  useEffect(() => {
+    if (!findOpen || !active || !matching || !count) return;
+    const { doc, ranges } = matching;
+    const range = ranges[currentMatch];
+    highlightPreviewMatches(doc, ranges, range);
+    if (iframe.current?.contentDocument === doc) revealPreviewMatch(doc, range);
+    return () => highlightPreviewMatches(doc, [], undefined);
+  }, [findOpen, active, matching, count, currentMatch, iframe]);
+
+  useEffect(() => {
+    if (!active || !selectedItem) return;
+    const searchShortcut = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.isComposing || document.querySelector('dialog[open]')) return;
+      const fromEditor = event.target instanceof Element && event.target.closest('.cm-editor');
+      if (fromEditor) return;
+      const find = !event.altKey && (event.ctrlKey || event.metaKey) && (event.code === 'KeyF' || event.key.toLowerCase() === 'f');
+      if (find) openFind();
+      else if (findOpen && event.key === 'Escape') closeFind();
+      else if (findOpen && event.key === 'F3') moveMatch(event.shiftKey ? -1 : 1);
+      else return;
+      event.preventDefault();
+      event.stopPropagation();
+    };
+    window.addEventListener('keydown', searchShortcut, true);
+    return () => window.removeEventListener('keydown', searchShortcut, true);
+  }, [active, selectedItem?.path, findOpen, count, readingFullscreen]);
 
   const saveCopy = async (source: string, path: string, revision: string | null) => {
     setCopyBusy(true); setEditorError('');
@@ -159,7 +245,7 @@ export const PreviewTab: React.FC<PreviewTabProps> = ({
   };
   useEffect(() => {
     const shortcut = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || document.querySelector('dialog[open]') || !selectedItem || isRunning) return;
+      if (event.defaultPrevented || document.querySelector('dialog[open]') || !selectedItem || isRunning || readingFullscreen) return;
       if ((event.ctrlKey || event.metaKey) && (event.code === 'KeyS' || event.key.toLowerCase() === 's')) {
         event.preventDefault();
         if (event.shiftKey) void pickCopy();
@@ -168,7 +254,7 @@ export const PreviewTab: React.FC<PreviewTabProps> = ({
     };
     window.addEventListener('keydown', shortcut);
     return () => window.removeEventListener('keydown', shortcut);
-  }, [selectedItem?.path, draft, isRunning, copyBusy, editor.save]);
+  }, [selectedItem?.path, draft, isRunning, copyBusy, editor.save, readingFullscreen]);
 
   if (!selectedItem) {
     return (
@@ -185,8 +271,8 @@ export const PreviewTab: React.FC<PreviewTabProps> = ({
   return (
     <div className="h-full flex flex-col bg-card transition-colors duration-200">
       {/* Slim preview toolbar */}
-      <div className="preview-bar flex items-center justify-between gap-3 px-3 h-11 border-b border-main bg-surface transition-colors">
-        <div className="flex items-center gap-2 min-w-0 flex-1">
+      <div hidden={readingFullscreen} className="preview-bar flex items-center justify-between gap-3 px-3 h-11 border-b border-main bg-surface transition-colors">
+        <div className="preview-bar-identity flex items-center gap-2 min-w-0 flex-1">
           <FileText className="w-4 h-4 text-blue-500 shrink-0" />
           <span
             className="text-xs font-mono font-medium text-main truncate min-w-0"
@@ -206,7 +292,7 @@ export const PreviewTab: React.FC<PreviewTabProps> = ({
           )}
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="preview-bar-actions flex items-center gap-2 shrink-0">
           <span className="preview-bar-hint text-[11px] text-dim whitespace-nowrap">
             {getDirectionLabel(markdownContent)}
           </span>
@@ -251,25 +337,33 @@ export const PreviewTab: React.FC<PreviewTabProps> = ({
                   : 'text-muted hover:text-main'
               }`}
               title="پیش‌نمایش سند با فونت وزیرمتن و ساختار کامل"
+              aria-label="پیش‌نمایش"
               aria-pressed={viewMode === 'rendered'}
             >
               <Eye className="w-3.5 h-3.5" />
               <span className="preview-bar-label">پیش‌نمایش</span>
             </button>
             <button
-              onClick={() => { setViewMode('source'); setEditing(false); }}
+              onClick={() => { setViewMode('source'); setEditing(false); setFindOpen(false); }}
               className={`btn px-2 py-0.5 rounded ${
                 viewMode === 'source'
                   ? 'bg-blue-600 text-white font-medium'
                   : 'text-muted hover:text-main'
               }`}
               title="مشاهده متن خام مارک‌داون"
+              aria-label="کد منبع"
               aria-pressed={viewMode === 'source'}
             >
               <Code className="w-3.5 h-3.5" />
               <span className="preview-bar-label">کد منبع</span>
             </button>
           </div>
+
+          <button type="button" aria-label="جست‌وجو در سند" title="جست‌وجو در سند (Ctrl+F)" aria-expanded={findOpen}
+            className={`btn p-1.5 rounded ${findOpen ? 'bg-blue-600 text-white' : 'bg-subtle text-muted hover:bg-hover hover:text-main'}`}
+            onClick={() => { if (findOpen) closeFind(); else openFind(); }}>
+            <Search className="w-3.5 h-3.5" />
+          </button>
 
           <Tooltip label="ویرایش سند در همین پیش‌نمایش">
             <button type="button" aria-label="ویرایش سند" aria-pressed={editing} disabled={isRunning}
@@ -305,7 +399,11 @@ export const PreviewTab: React.FC<PreviewTabProps> = ({
         </div>
       </div>
 
-      {(editing || dirty || editorError) && <div className="editor-action-bar bg-surface border-b border-main shrink-0 px-3 py-2">
+      {findOpen && <PreviewFindBar input={findInput} query={findQuery} onQuery={setFindQuery} count={count}
+        capped={matching?.capped ?? false} index={currentMatch} searching={!!findQuery.trim() && !matching && !!findDocument}
+        onMove={moveMatch} onClose={closeFind} fullscreen={readingFullscreen} />}
+
+      {!readingFullscreen && (editing || dirty || editorError) && <div className="editor-action-bar bg-surface border-b border-main shrink-0 px-3 py-2">
         <div className="flex items-center flex-wrap gap-2">
           <span role="status" className="flex items-center gap-1.5 text-xs text-muted me-auto">
             {draft?.saving || copyBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : dirty ? <span className="w-1.5 h-1.5 rounded-full bg-amber-500" /> : <Check className="w-3.5 h-3.5" />}
@@ -328,15 +426,15 @@ export const PreviewTab: React.FC<PreviewTabProps> = ({
 
       {/* Content Rendering Body */}
       <div className="flex-1 min-h-0 overflow-hidden relative flex flex-col">
-        {(editing || lastEditor.current) && <div className={editing ? `editor-area min-h-0 overflow-hidden ${livePreview ? 'editor-area-split' : 'flex-1'}` : 'hidden'}>
+        {(editing || lastEditor.current) && <div className={editing && !readingFullscreen ? `editor-area min-h-0 overflow-hidden ${livePreview ? 'editor-area-split' : 'flex-1'}` : 'hidden'}>
           {lastEditor.current && <div className={draft ? 'h-full' : 'hidden'}><Suspense fallback={<div className="flex items-center justify-center h-full text-muted text-xs">در حال آماده‌سازی ویرایشگر…</div>}>
             <MarkdownEditor path={lastEditor.current.path} text={lastEditor.current.draft.text} theme={theme} readOnly={!draft || draft.saving || copyBusy || isRunning}
               onChange={text => { if (lastEditor.current) editor.change(lastEditor.current.path, text); }} onSave={() => { if (!isRunning && lastEditor.current) void editor.save(lastEditor.current.path); }} />
           </Suspense></div>}
           {!draft && <div className="p-5 text-sm text-muted">{editorError || 'در حال خواندن سند…'}</div>}
         </div>}
-        {editing && livePreview && <div className="flex items-center justify-between px-3 py-1 border-y border-main text-[11px] text-muted bg-surface shrink-0"><span>پیش‌نمایش زندهٔ پیش‌نویس</span><span>{previewBusy ? 'در حال به‌روزرسانی…' : 'تغییرات فقط با ذخیره روی فایل نوشته می‌شوند'}</span></div>}
-        <div className={viewMode === 'rendered' && (!editing || livePreview) ? 'flex-1 min-h-0 relative' : 'hidden'}>
+        {!readingFullscreen && editing && livePreview && <div className="flex items-center justify-between px-3 py-1 border-y border-main text-[11px] text-muted bg-surface shrink-0"><span>پیش‌نمایش زندهٔ پیش‌نویس</span><span>{previewBusy ? 'در حال به‌روزرسانی…' : 'تغییرات فقط با ذخیره روی فایل نوشته می‌شوند'}</span></div>}
+        <div className={readingFullscreen || (viewMode === 'rendered' && !previewPaused) ? 'flex-1 min-h-0 relative' : 'hidden'}>
             {isLoading && (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-card text-muted z-10">
                 <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
@@ -366,7 +464,34 @@ export const PreviewTab: React.FC<PreviewTabProps> = ({
                   const win = doc?.defaultView;
                   if (!doc || !win) return;
                   const path = selectedItem.path;
-                  const saved = readingRef.current.rememberScroll ? scrollPositions.current.get(path) : undefined;
+                  setRenderedDoc({ doc, path });
+                  const key = documentKey(path);
+                  const position = readingPositions.get(key);
+                  const saved = readingRef.current.rememberScroll || (readingRef.current.resumeReading && position?.restoreOnOpen) ? position : undefined;
+                  // Chromium sends precision-touchpad pinches as Ctrl+wheel inside this document.
+                  let gestureZoom = zoomControl.current.zoom;
+                  let reportedZoom = gestureZoom;
+                  let animationFrame = 0;
+                  doc.addEventListener('wheel', event => {
+                    if (!event.ctrlKey) return;
+                    event.preventDefault();
+                    const current = zoomControl.current.zoom;
+                    if (!animationFrame && current !== reportedZoom) gestureZoom = current;
+                    const deltaMode = event.deltaMode;
+                    const pixels = event.deltaY * (deltaMode === 1 ? 16 : deltaMode === 2 ? win.innerHeight : 1);
+                    gestureZoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, gestureZoom * Math.exp(-pixels * 0.003)));
+                    if (animationFrame) return;
+                    animationFrame = requestAnimationFrame(() => {
+                      animationFrame = 0;
+                      if (iframe.current?.contentDocument !== doc) return;
+                      if (zoomControl.current.zoom !== current) {
+                        gestureZoom = reportedZoom = zoomControl.current.zoom;
+                        return;
+                      }
+                      reportedZoom = Math.round(gestureZoom);
+                      if (reportedZoom !== zoomControl.current.zoom) zoomControl.current.onZoomChange(reportedZoom);
+                    });
+                  }, { capture: true, passive: false });
                   const headingIds = new Map<string, number>();
                   for (const heading of doc.querySelectorAll('h1,h2,h3,h4,h5,h6')) {
                     if (heading.id) continue;
@@ -390,17 +515,21 @@ export const PreviewTab: React.FC<PreviewTabProps> = ({
                     }
                   });
                   doc.addEventListener('scroll', () => {
-                    if (!readingRef.current.rememberScroll) return;
-                    scrollPositions.current.set(path, { x: win.scrollX, y: win.scrollY });
-                    if (scrollPositions.current.size > 32) scrollPositions.current.delete(scrollPositions.current.keys().next().value!);
+                    if (iframe.current?.contentDocument !== doc || !iframe.current?.getClientRects().length) return;
+                    if (!readingRef.current.rememberScroll && !readingRef.current.resumeReading) return;
+                    readingPositions.set(key, { x: win.scrollX, y: win.scrollY });
+                    onReadingPositionChange();
                   }, { passive: true });
                   doc.addEventListener('keydown', event => {
-                    if (!['Comma', 'KeyO', 'KeyW', 'KeyR', 'KeyS'].includes(event.code) && !['o', 'w', 'r', 's', 'Delete', 'F5'].includes(event.key.length === 1 ? event.key.toLowerCase() : event.key)) return;
-                    const forwarded = new KeyboardEvent('keydown', { key: event.key, code: event.code, ctrlKey: event.ctrlKey, metaKey: event.metaKey, shiftKey: event.shiftKey, cancelable: true });
+                    if (!['Comma', 'KeyF', 'KeyO', 'KeyW', 'KeyR', 'KeyS'].includes(event.code) && !['f', 'o', 'w', 'r', 's', '+', '=', '-', '0', 'Delete', 'F3', 'F5', 'Escape'].includes(event.key.length === 1 ? event.key.toLowerCase() : event.key)) return;
+                    const forwarded = new KeyboardEvent('keydown', { key: event.key, code: event.code, altKey: event.altKey, ctrlKey: event.ctrlKey, metaKey: event.metaKey, shiftKey: event.shiftKey, isComposing: event.isComposing, cancelable: true });
                     if (!window.dispatchEvent(forwarded)) event.preventDefault();
                   });
                   if (saved) void doc.fonts.ready.then(() => {
-                    if (iframe.current?.contentDocument === doc) win.scrollTo(saved.x, saved.y);
+                    if (iframe.current?.contentDocument === doc) {
+                      if (saved.restoreOnOpen) readingPositions.set(key, { x: saved.x, y: saved.y });
+                      win.scrollTo(saved.x, saved.y);
+                    }
                   });
                 }}
                 className="w-full h-full border-0 bg-transparent"
@@ -409,7 +538,7 @@ export const PreviewTab: React.FC<PreviewTabProps> = ({
             ) : null}
         </div>
           <div
-            className={`${viewMode === 'source' ? '' : 'hidden'} h-full overflow-y-auto p-6 font-mono text-xs text-main leading-relaxed text-left whitespace-pre-wrap selection:bg-blue-500/30`}
+            className={`${viewMode === 'source' && !readingFullscreen ? '' : 'hidden'} h-full overflow-y-auto p-6 font-mono text-xs text-main leading-relaxed text-left whitespace-pre-wrap selection:bg-blue-500/30`}
             dir="ltr"
           >
             {(draft ? draft.text : markdownContent) || 'این فایل خالی است.'}

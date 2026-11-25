@@ -9,17 +9,18 @@ export interface AppSettings {
   readingWidth: 'page' | 'wide';
   wrapCode: boolean;
   rememberScroll: boolean;
+  resumeReading: boolean;
   focusNewFiles: boolean;
   showConversionLogs: boolean;
   confirmClearQueue: boolean;
   rememberConversionOptions: boolean;
 }
-export type ReadingSettings = Pick<AppSettings, 'lineHeight' | 'readingWidth' | 'wrapCode' | 'rememberScroll'>;
+export type ReadingSettings = Pick<AppSettings, 'lineHeight' | 'readingWidth' | 'wrapCode' | 'rememberScroll' | 'resumeReading'>;
 
 export const SETTINGS_KEY = 'mdpersia.preferences.v1';
 export const DEFAULT_APP_SETTINGS: AppSettings = {
   theme: 'dark', previewZoom: 100, lineHeight: 1.8, readingWidth: 'page',
-  wrapCode: true, rememberScroll: true, focusNewFiles: true,
+  wrapCode: true, rememberScroll: true, resumeReading: false, focusNewFiles: true,
   showConversionLogs: true, confirmClearQueue: false, rememberConversionOptions: true,
 };
 
@@ -37,12 +38,12 @@ export function normalizeAppSettings(value: unknown): AppSettings {
   if (['dark', 'light', 'system'].includes(raw.theme as string)) result.theme = raw.theme as ThemePreference;
   if (raw.readingWidth === 'page' || raw.readingWidth === 'wide') result.readingWidth = raw.readingWidth;
   if (typeof raw.previewZoom === 'number' && Number.isFinite(raw.previewZoom)) {
-    result.previewZoom = Math.round(Math.min(200, Math.max(60, raw.previewZoom)) / 10) * 10;
+    result.previewZoom = Math.round(Math.min(200, Math.max(60, raw.previewZoom)));
   }
   if (typeof raw.lineHeight === 'number' && Number.isFinite(raw.lineHeight)) {
     result.lineHeight = Math.round(Math.min(2.4, Math.max(1.4, raw.lineHeight)) * 10) / 10;
   }
-  for (const key of ['wrapCode', 'rememberScroll', 'focusNewFiles', 'showConversionLogs', 'confirmClearQueue', 'rememberConversionOptions'] as const) {
+  for (const key of ['wrapCode', 'rememberScroll', 'resumeReading', 'focusNewFiles', 'showConversionLogs', 'confirmClearQueue', 'rememberConversionOptions'] as const) {
     if (typeof raw[key] === 'boolean') result[key] = raw[key];
   }
   return result;
